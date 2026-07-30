@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { ActiveTab, Agent, AgentSkill, FallbackRule, FlowEdge, FlowNode, FlowReleaseVersion, GuardrailConfig, KnowledgeBase, MCPServer, ModelProvider, PermissionScope, RoleBinding, Tool, Trace, VirtualKey } from './types';
+import React, { useState } from 'react';
+import { ActiveTab, Agent, AgentSkill, FallbackRule, FlowEdge, FlowNode, FlowReleaseVersion, GuardrailConfig, KnowledgeBase, MCPServer, ModelProvider, PermissionScope, RoleBinding, Span, Tool, Trace, VirtualKey } from './types';
 import { Navbar } from './components/Navbar';
 import { BuilderView } from './components/views/BuilderView';
 import { GatewayView } from './components/views/GatewayView';
@@ -58,41 +58,9 @@ export default function App() {
   const [isSkillModalOpen, setIsSkillModalOpen] = useState(false);
   const [isAgentModalOpen, setIsAgentModalOpen] = useState(false);
 
-  // Fetch live backend state on mount
-  useEffect(() => {
-    async function loadData() {
-      try {
-        const [keysRes, provRes, fbRes, mcpRes, toolsRes, agentsRes, scopesRes, rolesRes, guardRes, tracesRes] = await Promise.all([
-          fetch('/api/gateway/keys'),
-          fetch('/api/gateway/providers'),
-          fetch('/api/gateway/fallbacks'),
-          fetch('/api/registry/mcp-servers'),
-          fetch('/api/registry/tools'),
-          fetch('/api/registry/agents'),
-          fetch('/api/policy/scopes'),
-          fetch('/api/policy/roles'),
-          fetch('/api/policy/guardrails'),
-          fetch('/api/traces'),
-        ]);
+  // Static deployment: all data is loaded from initialData, no backend API needed.
 
-        if (keysRes.ok) setVirtualKeys(await keysRes.json());
-        if (provRes.ok) setProviders(await provRes.json());
-        if (fbRes.ok) setFallbackRules(await fbRes.json());
-        if (mcpRes.ok) setMcpServers(await mcpRes.json());
-        if (toolsRes.ok) setTools(await toolsRes.json());
-        if (agentsRes.ok) setAgents(await agentsRes.json());
-        if (scopesRes.ok) setScopes(await scopesRes.json());
-        if (rolesRes.ok) setRoles(await rolesRes.json());
-        if (guardRes.ok) setGuardrails(await guardRes.json());
-        if (tracesRes.ok) setTraces(await tracesRes.json());
-      } catch (e) {
-        console.warn('Backend API offline, falling back to local state:', e);
-      }
-    }
-    loadData();
-  }, []);
-
-  // Handler: Issue Virtual Key
+  // Handler: Issue Virtual Key (local-only)
   const handleCreateKey = async (keyData: {
     name: string;
     team: string;
@@ -102,48 +70,29 @@ export default function App() {
     allowedModels: string[];
     fallbackModels: string[];
   }) => {
-    try {
-      const res = await fetch('/api/gateway/keys', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(keyData),
-      });
-      if (res.ok) {
-        const newKey = await res.json();
-        setVirtualKeys((prev) => [newKey, ...prev]);
-      } else {
-        throw new Error('API request failed');
-      }
-    } catch {
-      const localKey: VirtualKey = {
-        id: `vk-${Date.now().toString().slice(-4)}`,
-        name: keyData.name,
-        keyPrefix: `vk_live_${Math.random().toString(36).substring(2, 8)}`,
-        team: keyData.team,
-        budgetLimitMonthly: keyData.budgetLimitMonthly,
-        budgetSpentCurrent: 0,
-        rpmLimit: keyData.rpmLimit,
-        tpmLimit: keyData.tpmLimit,
-        allowedModels: keyData.allowedModels,
-        fallbackModels: keyData.fallbackModels,
-        createdAt: new Date().toISOString().split('T')[0],
-        status: 'active',
-      };
-      setVirtualKeys((prev) => [localKey, ...prev]);
-    }
+    const localKey: VirtualKey = {
+      id: `vk-${Date.now().toString().slice(-4)}`,
+      name: keyData.name,
+      keyPrefix: `vk_live_${Math.random().toString(36).substring(2, 8)}`,
+      team: keyData.team,
+      budgetLimitMonthly: keyData.budgetLimitMonthly,
+      budgetSpentCurrent: 0,
+      rpmLimit: keyData.rpmLimit,
+      tpmLimit: keyData.tpmLimit,
+      allowedModels: keyData.allowedModels,
+      fallbackModels: keyData.fallbackModels,
+      createdAt: new Date().toISOString().split('T')[0],
+      status: 'active',
+    };
+    setVirtualKeys((prev) => [localKey, ...prev]);
   };
 
-  // Handler: Delete Virtual Key
+  // Handler: Delete Virtual Key (local-only)
   const handleDeleteKey = async (keyId: string) => {
-    try {
-      await fetch(`/api/gateway/keys/${keyId}`, { method: 'DELETE' });
-    } catch (e) {
-      console.warn('Backend delete key call failed:', e);
-    }
     setVirtualKeys((prev) => prev.filter((k) => k.id !== keyId));
   };
 
-  // Handler: Register MCP Target
+  // Handler: Register MCP Target (local-only)
   const handleCreateMcp = async (serverData: {
     name: string;
     type: 'openapi' | 'smithy' | 'lambda' | 'mcp_jsonrpc' | 'postgres';
@@ -151,32 +100,18 @@ export default function App() {
     authType: 'oauth2' | 'bearer' | 'mtls' | 'none';
     description: string;
   }) => {
-    try {
-      const res = await fetch('/api/registry/mcp-servers', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(serverData),
-      });
-      if (res.ok) {
-        const newServer = await res.json();
-        setMcpServers((prev) => [newServer, ...prev]);
-      } else {
-        throw new Error('API failed');
-      }
-    } catch {
-      const localMcp: MCPServer = {
-        id: `mcp-${Date.now().toString().slice(-4)}`,
-        name: serverData.name,
-        type: serverData.type,
-        endpoint: serverData.endpoint,
-        status: 'online',
-        latencyMs: 35,
-        toolsCount: 1,
-        authType: serverData.authType,
-        description: serverData.description,
-      };
-      setMcpServers((prev) => [localMcp, ...prev]);
-    }
+    const localMcp: MCPServer = {
+      id: `mcp-${Date.now().toString().slice(-4)}`,
+      name: serverData.name,
+      type: serverData.type,
+      endpoint: serverData.endpoint,
+      status: 'online',
+      latencyMs: 35,
+      toolsCount: 1,
+      authType: serverData.authType,
+      description: serverData.description,
+    };
+    setMcpServers((prev) => [localMcp, ...prev]);
   };
 
   // Handler: Create Agent
@@ -205,36 +140,18 @@ export default function App() {
     setSkills((prev) => prev.map((s) => (s.id === skillId ? { ...s, enabled } : s)));
   };
 
-  // Handler: Toggle Tool Enabled State
+  // Handler: Toggle Tool Enabled State (local-only)
   const handleToggleTool = async (toolId: string, enabled: boolean) => {
     setTools((prev) => prev.map((t) => (t.id === toolId ? { ...t, enabled } : t)));
-    try {
-      await fetch('/api/registry/tools/toggle', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ toolId, enabled }),
-      });
-    } catch (e) {
-      console.warn('Backend tool toggle failed:', e);
-    }
   };
 
-  // Handler: Update Guardrails
+  // Handler: Update Guardrails (local-only)
   const handleUpdateGuardrails = async (newConfig: Partial<GuardrailConfig>) => {
     const updated = { ...guardrails, ...newConfig };
     setGuardrails(updated);
-    try {
-      await fetch('/api/policy/guardrails', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updated),
-      });
-    } catch (e) {
-      console.warn('Backend guardrails update failed:', e);
-    }
   };
 
-  // Handler: Execute Chat in Playground
+  // Handler: Execute Chat in Playground (local mock - no backend needed)
   const handleExecuteChat = async (payload: {
     prompt: string;
     systemPrompt: string;
@@ -242,37 +159,118 @@ export default function App() {
     selectedTools: string[];
     temperature: number;
   }) => {
-    const res = await fetch('/api/playground/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+    const startTime = Date.now();
+    const traceId = `tr-${Date.now().toString().slice(-4)}`;
+    const sessionId = `sess_play_${Math.random().toString(36).substring(2, 6)}`;
+
+    // Simulate processing delay
+    await new Promise((r) => setTimeout(r, 300 + Math.random() * 700));
+
+    const generatedText = `[企業級 Gateway 代理 Agent 回應]\n\n收到 Prompt：「${payload.prompt}」\n\n執行上下文：\n- 推導模型：${payload.model || 'gemini-3.6-flash'}\n- 啟用工具：${payload.selectedTools?.join(', ') || '無'}\n- 安全護欄：已通過 PII 敏感數據脫敏與 Prompt 注入檢查。\n\n模擬輸出：請求已成功透過虛擬金鑰路由完成推導處理。`;
+    const promptTokens = Math.max(12, Math.floor(payload.prompt.length / 3));
+    const completionTokens = Math.floor(generatedText.length / 3);
+    const durationMs = Date.now() - startTime;
+    const totalTokens = promptTokens + completionTokens;
+    const totalCost = Number(((promptTokens * 0.000001) + (completionTokens * 0.000003)).toFixed(6));
+
+    const childSpans: Span[] = [
+      {
+        id: `sp-guard-${Date.now()}-1`,
+        name: '安全護欄：Cedar PII 與安全過濾器',
+        type: 'guardrail',
+        status: 'success',
+        startTime: new Date(startTime + 5).toISOString(),
+        durationMs: 18,
+        tokensPrompt: 0,
+        tokensCompletion: 0,
+        cost: 0.00005,
+        input: { promptSample: payload.prompt.slice(0, 50) },
+        output: { piiDetected: false, promptInjectionScore: 0.02, status: 'PASSED' },
+      },
+    ];
+
+    if (payload.selectedTools && payload.selectedTools.length > 0) {
+      payload.selectedTools.forEach((toolName: string, idx: number) => {
+        childSpans.push({
+          id: `sp-tool-${Date.now()}-${idx}`,
+          name: `工具調用：${toolName}`,
+          type: 'mcp_tool',
+          status: 'success',
+          startTime: new Date(startTime + 35 + idx * 40).toISOString(),
+          durationMs: 45,
+          tokensPrompt: 0,
+          tokensCompletion: 0,
+          cost: 0.0002,
+          input: { tool: toolName, params: { query: payload.prompt } },
+          output: { result: `已透過 AgentCore Gateway 成功執行 ${toolName}`, status: '200_OK' },
+        });
+      });
+    }
+
+    childSpans.push({
+      id: `sp-llm-${Date.now()}-1`,
+      name: `LLM 模型調用：${payload.model || 'gemini-3.6-flash'}`,
+      type: 'llm',
+      status: 'success',
+      startTime: new Date(startTime + 100).toISOString(),
+      durationMs: Math.max(80, durationMs - 100),
+      tokensPrompt: promptTokens,
+      tokensCompletion: completionTokens,
+      cost: totalCost,
+      input: { model: payload.model || 'gemini-3.6-flash', temperature: payload.temperature || 0.7 },
+      output: { responseText: generatedText.slice(0, 100) + '...' },
     });
 
-    if (!res.ok) {
-      throw new Error('Chat API failed');
-    }
+    const newTrace: Trace = {
+      id: traceId,
+      sessionId,
+      name: `測試場執行：${payload.prompt.slice(0, 30)}...`,
+      agentName: '測試場自訂 Agent',
+      virtualKeyName: '開發測試沙盒金鑰',
+      teamName: '研發實驗室',
+      status: 'success',
+      totalDurationMs: durationMs,
+      totalTokens,
+      totalCost,
+      timestamp: new Date().toISOString(),
+      userPrompt: payload.prompt,
+      finalResponse: generatedText,
+      rootSpan: {
+        id: `sp-root-${Date.now()}`,
+        name: 'Playground Session Root',
+        type: 'agent',
+        status: 'success',
+        startTime: new Date(startTime).toISOString(),
+        durationMs,
+        tokensPrompt: promptTokens,
+        tokensCompletion: completionTokens,
+        cost: totalCost,
+        input: { prompt: payload.prompt },
+        output: { text: generatedText },
+        children: childSpans,
+      },
+      tags: ['environment:playground', 'user:interactive', `model:${payload.model || 'gemini-3.6-flash'}`],
+    };
 
-    const data = await res.json();
-    if (data.trace) {
-      setTraces((prev) => [data.trace, ...prev]);
-    }
-    return data;
+    setTraces((prev) => [newTrace, ...prev]);
+
+    return {
+      text: generatedText,
+      trace: newTrace,
+      stats: { durationMs, totalTokens, promptTokens, completionTokens, cost: totalCost },
+    };
   };
 
-  // Handler: Execute Test Flow in Builder
+  // Handler: Execute Test Flow in Builder (local mock)
   const handleRunTestFlow = async (prompt: string) => {
-    try {
-      const data = await handleExecuteChat({
-        prompt,
-        systemPrompt: '你是一位經由 Langflow / Dify 畫布建構的企業級 Agent。',
-        model: 'gemini-3.6-flash',
-        selectedTools: ['tool-slack-post', 'tool-qdrant-search'],
-        temperature: 0.2,
-      });
-      return data.trace;
-    } catch (e) {
-      console.warn('Test flow execution failed, generating fallback trace:', e);
-    }
+    const data = await handleExecuteChat({
+      prompt,
+      systemPrompt: '你是一位經由 Langflow / Dify 畫布建構的企業級 Agent。',
+      model: 'gemini-3.6-flash',
+      selectedTools: ['tool-slack-post', 'tool-qdrant-search'],
+      temperature: 0.2,
+    });
+    return data.trace;
   };
 
   return (
