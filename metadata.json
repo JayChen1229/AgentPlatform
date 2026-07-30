@@ -1,0 +1,6 @@
+{
+  "name": "企業級 AI Agent 平台",
+  "description": "企業級 AI Agent 平台 Web UI，包含 【Build 面】視覺化拖拉建構器 (Langflow/Dify)、RAG 知識庫與一鍵發布，以及 【Govern 面】LiteLLM 模型網關、Langfuse 追蹤可觀測性、MCP 工具註冊表、21點 Cedar/OPA 策略治理與成本數據分析。",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
