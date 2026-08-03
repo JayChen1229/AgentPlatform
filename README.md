@@ -255,15 +255,20 @@
 
 #### 競品對標分析
 
-| 功能 | 本平台 | Cedar (AWS) | OPA | Permit.io | Loom |
-|------|--------|-------------|-----|-----------|------|
-| 細粒度權限點 (21 個) | ✅ | ✅ | ✅ | ✅ | ⚠️ 有限 |
-| RBAC 角色綁定 | ✅ | ✅ | ✅ | ✅ | ✅ |
-| PII 脫敏護欄 | ✅ | ❌ | ❌ | ❌ | ❌ |
-| Prompt 注入防禦 | ✅ | ❌ | ❌ | ❌ | ❌ |
-| 幻覺檢測 | ✅ | ❌ | ❌ | ❌ | ❌ |
-| 禁止話題清單 | ✅ | ❌ | ❌ | ❌ | ❌ |
-| 可視化授權矩陣 | ✅ | ❌ | ❌ | ✅ | ⚠️ 有限 |
+| 功能 | 本平台 | AWS AgentCore (Bedrock Guardrails) | Cedar (AWS) | OPA | Permit.io |
+|------|--------|-------------------------------------|-------------|-----|-----------|
+| 細粒度權限點 (21 個) | ✅ | ✅ (IAM + Cedar 整合) | ✅ | ✅ | ✅ |
+| RBAC 角色綁定 | ✅ | ✅ (IAM Role) | ✅ | ✅ | ✅ |
+| PII 脫敏護欄 | ✅ | ✅ (Bedrock Guardrails 內建) | ❌ | ❌ | ❌ |
+| Prompt 注入防禦 | ✅ | ✅ (Bedrock Guardrails 內建) | ❌ | ❌ | ❌ |
+| 毒性內容過濾 | ✅ | ✅ (Bedrock Guardrails 內建) | ❌ | ❌ | ❌ |
+| 幻覺檢測 (Grounding Check) | ✅ | ✅ (Bedrock Guardrails Grounding) | ❌ | ❌ | ❌ |
+| 禁止話題清單 | ✅ | ✅ (Denied Topics 功能) | ❌ | ❌ | ❌ |
+| 單次輸出成本上限 | ✅ | ⚠️ 需搭配 Budgets API | ❌ | ❌ | ❌ |
+| 可視化授權矩陣 UI | ✅ | ❌ (需透過 Console/CLI) | ❌ | ❌ | ✅ |
+
+> [!NOTE]
+> AWS AgentCore 透過整合 **Bedrock Guardrails** 已涵蓋多數安全護欄能力（PII 脫敏、Prompt 注入、毒性過濾、幻覺檢測、禁止話題）。Cedar 與 OPA 則專注於策略授權引擎，不涉及 AI 安全護欄層。本平台的差異化在於將**策略授權 + AI 護欄**整合於同一可視化 UI，無需在多個 AWS 服務間切換。
 
 ---
 
