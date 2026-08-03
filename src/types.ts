@@ -1,7 +1,43 @@
-export type ActiveTab = 'builder' | 'gateway' | 'traces' | 'registry' | 'policy' | 'playground' | 'analytics';
+export type ActiveTab = 'builder' | 'gateway' | 'traces' | 'registry' | 'policy' | 'playground' | 'analytics' | 'reviews';
+
+// Review & Approval Workflow
+export type ReviewStatus = 'draft' | 'pending_review' | 'approved' | 'rejected';
+
+export type ReviewAction = 'approve' | 'reject' | 'request_changes';
+
+export interface ReviewRecord {
+  submittedBy: string;
+  submittedAt: string;
+  reviewedBy?: string;
+  reviewedAt?: string;
+  reviewComment?: string;
+  reviewAction?: ReviewAction;
+  version: number;
+  previousVersion?: number;
+  changeReason?: string; // for schema-change re-reviews
+}
+
+export type ReviewableItemType = 'agent' | 'skill' | 'mcp_server' | 'tool';
+
+export interface ReviewQueueItem {
+  id: string;
+  itemType: ReviewableItemType;
+  name: string;
+  description: string;
+  reviewStatus: ReviewStatus;
+  reviewRecord: ReviewRecord;
+  // reference data for detail panel
+  refData: Agent | AgentSkill | MCPServer | Tool;
+}
 
 // Visual Agent Builder (Langflow / Dify Style)
 export type FlowNodeType = 'start' | 'llm' | 'tool' | 'skill' | 'agent' | 'router' | 'rag' | 'prompt' | 'output';
+
+export interface ParameterMapping {
+  fieldName: string;
+  sourceNodeId: string;
+  sourceVariable: string;
+}
 
 export interface FlowNodeConfig {
   model?: string;
@@ -24,6 +60,7 @@ export interface FlowNodeConfig {
   minScore?: number;
   embeddingModel?: string;
   vectorDb?: string;
+  parameterMappings?: ParameterMapping[];
 }
 
 export interface FlowNode {
@@ -79,6 +116,9 @@ export interface AgentSkill {
   enabled: boolean;
   usageCount: number;
   updatedAt: string;
+  // Review fields
+  reviewStatus: ReviewStatus;
+  reviewRecord?: ReviewRecord;
 }
 
 // Gateway & Routing
@@ -165,6 +205,12 @@ export interface MCPServer {
   toolsCount: number;
   authType: 'oauth2' | 'bearer' | 'mtls' | 'none';
   description: string;
+  // Review fields
+  reviewStatus: ReviewStatus;
+  reviewRecord?: ReviewRecord;
+  discoveredToolsCount?: number;
+  approvedToolsCount?: number;
+  pendingToolsCount?: number;
 }
 
 export interface Tool {
@@ -181,6 +227,10 @@ export interface Tool {
   outputSchema: Record<string, any>;
   timeoutSec: number;
   avgLatencyMs: number;
+  // Review fields
+  reviewStatus: ReviewStatus;
+  reviewRecord?: ReviewRecord;
+  autoDiscovered?: boolean;
 }
 
 export interface Agent {
@@ -196,6 +246,9 @@ export interface Agent {
   systemPrompt: string;
   guardrailsEnabled: boolean;
   updatedAt: string;
+  // Review fields
+  reviewStatus: ReviewStatus;
+  reviewRecord?: ReviewRecord;
 }
 
 // Policy & Governance (Loom / Cedar-OPA 21 Scopes)

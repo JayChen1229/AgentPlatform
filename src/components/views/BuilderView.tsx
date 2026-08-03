@@ -444,101 +444,116 @@ export const BuilderView: React.FC<BuilderViewProps> = ({
                     </div>
                   )}
 
-                  {/* Flow Node Card (Draggable and Reorderable) */}
-                  <div
-                    draggable
-                    onDragStart={(e) => {
-                      setDraggedNodeIndex(index);
-                      e.dataTransfer.setData('text/plain', index.toString());
-                    }}
-                    onDragOver={(e) => {
-                      e.preventDefault(); // allow drop
-                    }}
-                    onDrop={(e) => {
-                      e.preventDefault();
-                      if (draggedNodeIndex !== null) {
-                        handleReorderNodes(draggedNodeIndex, index);
-                        setDraggedNodeIndex(null);
-                      }
-                    }}
-                    onClick={() => setSelectedNodeId(node.id)}
-                    className={`cursor-pointer rounded-xl border p-3.5 transition-all relative group ${
-                      draggedNodeIndex === index ? 'opacity-40 border-dashed border-purple-400' : ''
-                    } ${
-                      isExecuting
-                        ? 'bg-purple-900/40 border-purple-400 ring-4 ring-purple-500/30 shadow-lg scale-[1.01]'
-                        : isSelected
-                        ? 'bg-slate-900 border-purple-500 ring-2 ring-purple-500/30 shadow-md'
-                        : 'bg-slate-900/80 border-slate-800 hover:border-slate-700 hover:bg-slate-900'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-2">
-                        {/* Drag Handle Icon & Sequence Number */}
-                        <div 
-                          className="flex items-center space-x-1 text-slate-500 hover:text-purple-300 cursor-grab active:cursor-grabbing p-1 rounded hover:bg-slate-800"
-                          title="按住拖曳調整 Flow 執行順序"
-                        >
-                          <GripVertical className="w-4 h-4" />
-                          <span className="text-[11px] font-mono font-bold text-purple-400">#{index + 1}</span>
+                  {(() => {
+                    const isNodeToolUnapproved = node.type === 'tool' && (() => {
+                      const t = tools.find((tool) => tool.id === node.config.toolId);
+                      return t && t.reviewStatus !== 'approved';
+                    })();
+
+                    return (
+                      <div
+                        draggable
+                        onDragStart={(e) => {
+                          setDraggedNodeIndex(index);
+                          e.dataTransfer.setData('text/plain', index.toString());
+                        }}
+                        onDragOver={(e) => {
+                          e.preventDefault();
+                        }}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          if (draggedNodeIndex !== null) {
+                            handleReorderNodes(draggedNodeIndex, index);
+                            setDraggedNodeIndex(null);
+                          }
+                        }}
+                        onClick={() => setSelectedNodeId(node.id)}
+                        className={`cursor-pointer rounded-xl border p-3.5 transition-all relative group ${
+                          draggedNodeIndex === index ? 'opacity-40 border-dashed border-purple-400' : ''
+                        } ${
+                          isNodeToolUnapproved
+                            ? 'bg-amber-950/30 border-amber-500 ring-2 ring-amber-500/40 shadow-lg'
+                            : isExecuting
+                            ? 'bg-purple-900/40 border-purple-400 ring-4 ring-purple-500/30 shadow-lg scale-[1.01]'
+                            : isSelected
+                            ? 'bg-slate-900 border-purple-500 ring-2 ring-purple-500/30 shadow-md'
+                            : 'bg-slate-900/80 border-slate-800 hover:border-slate-700 hover:bg-slate-900'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-2">
+                            {/* Drag Handle Icon & Sequence Number */}
+                            <div 
+                              className="flex items-center space-x-1 text-slate-500 hover:text-purple-300 cursor-grab active:cursor-grabbing p-1 rounded hover:bg-slate-800"
+                              title="按住拖曳調整 Flow 執行順序"
+                            >
+                              <GripVertical className="w-4 h-4" />
+                              <span className="text-[11px] font-mono font-bold text-purple-400">#{index + 1}</span>
+                            </div>
+
+                            <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border ${typeBadge[node.type].style}`}>
+                              {typeBadge[node.type].label}
+                            </span>
+                            <h3 className="text-sm font-bold text-slate-100">{node.label}</h3>
+
+                            {isNodeToolUnapproved && (
+                              <span className="px-2 py-0.5 text-[9px] font-mono font-bold bg-amber-900 text-amber-200 border border-amber-700 rounded-full flex items-center space-x-1 animate-pulse">
+                                <AlertTriangle className="w-3 h-3 text-amber-400" />
+                                <span>工具已下架</span>
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Reorder Action Controls & Delete */}
+                          <div className="flex items-center space-x-1 bg-slate-950/80 p-1 rounded-lg border border-slate-800/80">
+                            {/* Move Up */}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleMoveNodeUp(index);
+                              }}
+                              disabled={index === 0}
+                              className="p-1 rounded text-slate-400 hover:text-purple-300 hover:bg-slate-800 disabled:opacity-20 disabled:hover:bg-transparent transition"
+                              title="向上移一格"
+                            >
+                              <ChevronUp className="w-3.5 h-3.5" />
+                            </button>
+
+                            {/* Move Down */}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleMoveNodeDown(index);
+                              }}
+                              disabled={index === nodes.length - 1}
+                              className="p-1 rounded text-slate-400 hover:text-purple-300 hover:bg-slate-800 disabled:opacity-20 disabled:hover:bg-transparent transition"
+                              title="向下移一格"
+                            >
+                              <ChevronDown className="w-3.5 h-3.5" />
+                            </button>
+
+                            <div className="w-px h-3 bg-slate-800 my-0.5 mx-0.5" />
+
+                            {isExecuting && (
+                              <span className="flex items-center space-x-1 text-xs text-purple-300 font-mono animate-pulse px-1">
+                                <RefreshCw className="w-3 h-3 animate-spin" />
+                                <span>執行中...</span>
+                              </span>
+                            )}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteNode(node.id);
+                              }}
+                              className="text-slate-500 hover:text-rose-400 p-1 rounded hover:bg-slate-800 transition"
+                              title="刪除節點"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         </div>
 
-                        <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border ${typeBadge[node.type].style}`}>
-                          {typeBadge[node.type].label}
-                        </span>
-                        <h3 className="text-sm font-bold text-slate-100">{node.label}</h3>
-                      </div>
-
-                      {/* Reorder Action Controls & Delete */}
-                      <div className="flex items-center space-x-1 bg-slate-950/80 p-1 rounded-lg border border-slate-800/80">
-                        {/* Move Up */}
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleMoveNodeUp(index);
-                          }}
-                          disabled={index === 0}
-                          className="p-1 rounded text-slate-400 hover:text-purple-300 hover:bg-slate-800 disabled:opacity-20 disabled:hover:bg-transparent transition"
-                          title="向上移一格"
-                        >
-                          <ChevronUp className="w-3.5 h-3.5" />
-                        </button>
-
-                        {/* Move Down */}
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleMoveNodeDown(index);
-                          }}
-                          disabled={index === nodes.length - 1}
-                          className="p-1 rounded text-slate-400 hover:text-purple-300 hover:bg-slate-800 disabled:opacity-20 disabled:hover:bg-transparent transition"
-                          title="向下移一格"
-                        >
-                          <ChevronDown className="w-3.5 h-3.5" />
-                        </button>
-
-                        <div className="w-px h-3 bg-slate-800 my-0.5 mx-0.5" />
-
-                        {isExecuting && (
-                          <span className="flex items-center space-x-1 text-xs text-purple-300 font-mono animate-pulse px-1">
-                            <RefreshCw className="w-3 h-3 animate-spin" />
-                            <span>執行中...</span>
-                          </span>
-                        )}
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDeleteNode(node.id);
-                          }}
-                          className="text-slate-500 hover:text-rose-400 p-1 rounded hover:bg-slate-800 transition"
-                          title="刪除節點"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Node Config Summary line */}
+                        {/* Node Config Summary line */}
                     <div className="mt-2 text-xs text-slate-400 font-mono flex flex-wrap items-center gap-3 bg-slate-950/60 p-2 rounded border border-slate-800/60">
                       {node.type === 'llm' && (
                         <>
@@ -578,9 +593,11 @@ export const BuilderView: React.FC<BuilderViewProps> = ({
                       )}
                     </div>
                   </div>
-                </React.Fragment>
-              );
-            })}
+                );
+              })()}
+            </React.Fragment>
+          );
+        })}
           </div>
 
           {/* Canvas Bottom Bar */}
@@ -717,9 +734,9 @@ export const BuilderView: React.FC<BuilderViewProps> = ({
               {selectedNode.type === 'tool' && (
                 <>
                   <div>
-                    <label className="block text-slate-400 mb-1 font-medium">綁定 MCP 工具 (AgentCore Gateway)</label>
+                    <label className="block text-slate-400 mb-1 font-medium">選擇工具 (僅限已核准工具)</label>
                     <select
-                      value={selectedNode.config.toolId || tools[0]?.id}
+                      value={selectedNode.config.toolId || (tools.find((t) => t.reviewStatus === 'approved')?.id || '')}
                       onChange={(e) => {
                         const t = tools.find((tool) => tool.id === e.target.value);
                         handleUpdateNodeConfig(selectedNode.id, {
@@ -727,24 +744,133 @@ export const BuilderView: React.FC<BuilderViewProps> = ({
                           toolName: t?.name,
                         });
                       }}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-rose-500"
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-rose-500 text-xs font-mono"
                     >
-                      {tools.map((t) => (
+                      {tools.filter((t) => t.reviewStatus === 'approved').map((t) => (
                         <option key={t.id} value={t.id}>
-                          {t.name} ({t.category})
+                          {t.name} ({t.mcpServerName})
                         </option>
                       ))}
                     </select>
                   </div>
+
+                  {(() => {
+                    const activeTool = tools.find((t) => t.id === (selectedNode.config.toolId || tools.find((tool) => tool.reviewStatus === 'approved')?.id));
+                    if (!activeTool) return null;
+
+                    const isUnapproved = activeTool.reviewStatus !== 'approved';
+                    const hasPermission = activeTool.scopeRequired === 'mcp:tool:execute:slack' || activeTool.scopeRequired === 'mcp:tool:execute:db' || activeTool.scopeRequired === 'mcp:tool:execute:code' || activeTool.scopeRequired === 'data:read:pii';
+
+                    // Available upstream variables for mapping
+                    const upstreamNodes = nodes.filter((n) => n.id !== selectedNode.id);
+                    const currentMappings = selectedNode.config.parameterMappings || [];
+
+                    const handleMappingChange = (fieldName: string, sourceVar: string) => {
+                      const updated = currentMappings.filter((m) => m.fieldName !== fieldName);
+                      if (sourceVar) {
+                        const [srcNodeId, srcVar] = sourceVar.split('::');
+                        updated.push({ fieldName, sourceNodeId: srcNodeId || 'node-start', sourceVariable: srcVar || 'user_input' });
+                      }
+                      handleUpdateNodeConfig(selectedNode.id, { parameterMappings: updated });
+                    };
+
+                    return (
+                      <div className="space-y-3 font-mono text-[11px]">
+                        {/* Off shelf / unapproved warning */}
+                        {isUnapproved && (
+                          <div className="bg-amber-950/60 border border-amber-800 p-2.5 rounded-lg text-amber-300 space-y-1">
+                            <div className="font-bold flex items-center space-x-1">
+                              <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
+                              <span>⚠️ 此工具已下架/待審核</span>
+                            </div>
+                            <p className="text-[10px] text-amber-400/80">治理團隊已暫停此工具，部署將被阻擋，請重新選擇已核准工具。</p>
+                          </div>
+                        )}
+
+                        {/* Readonly Tool Info */}
+                        <div className="bg-slate-950 p-3 rounded-lg border border-slate-800 space-y-1.5 text-slate-300">
+                          <div className="flex justify-between">
+                            <span className="text-slate-500">所屬 MCP 服務器:</span>
+                            <span className="text-rose-300 font-bold">{activeTool.mcpServerName}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-slate-500">平均延遲:</span>
+                            <span className="text-slate-200">{activeTool.avgLatencyMs} ms</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-slate-500">所需權限點:</span>
+                            <span className="text-indigo-400 font-bold">{activeTool.scopeRequired}</span>
+                          </div>
+                          {!hasPermission && (
+                            <div className="mt-1 text-red-400 text-[10px] bg-red-950/50 p-1.5 rounded border border-red-800">
+                              ⚠️ 此 Agent 身份缺少所需權限，無法上線
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Readonly input schema preview */}
+                        <div>
+                          <label className="block text-slate-400 mb-1 font-medium">inputSchema 結構圖 (唯讀)</label>
+                          <pre className="bg-slate-950 border border-slate-800 rounded-lg p-2 text-[10px] font-mono text-emerald-400 overflow-x-auto max-h-32">
+                            {JSON.stringify(activeTool.inputSchema, null, 2)}
+                          </pre>
+                        </div>
+
+                        {/* Parameter Mapping Section */}
+                        <div className="space-y-2 border-t border-slate-800 pt-2">
+                          <label className="block text-slate-300 font-semibold text-xs flex items-center space-x-1.5">
+                            <ArrowRight className="w-3.5 h-3.5 text-purple-400" />
+                            <span>參數映射 (Upstream Variable Mapping)</span>
+                          </label>
+                          <p className="text-[10px] text-slate-400">對應上游節點的 Context 輸出變數至 inputSchema 欄位：</p>
+
+                          {activeTool.inputSchema?.properties ? (
+                            Object.keys(activeTool.inputSchema.properties).map((propName) => {
+                              const propDef = activeTool.inputSchema.properties[propName];
+                              const currentMap = currentMappings.find((m) => m.fieldName === propName);
+                              const mapVal = currentMap ? `${currentMap.sourceNodeId}::${currentMap.sourceVariable}` : '';
+
+                              return (
+                                <div key={propName} className="bg-slate-950 p-2 rounded-lg border border-slate-800 space-y-1">
+                                  <div className="flex items-center justify-between text-[11px]">
+                                    <span className="font-bold text-slate-200">{propName}</span>
+                                    <span className="text-[10px] text-slate-500">({propDef.type || 'string'})</span>
+                                  </div>
+                                  <select
+                                    value={mapVal}
+                                    onChange={(e) => handleMappingChange(propName, e.target.value)}
+                                    className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-[10px] text-purple-300 focus:outline-none focus:border-purple-500"
+                                  >
+                                    <option value="">-- 未映射 (使用預設值) --</option>
+                                    <option value="node-start::user_input">#1 觸發點 ({{user_input}})</option>
+                                    <option value="node-rag::retrieved_context">#2 RAG 知識庫 ({{retrieved_context}})</option>
+                                    <option value="node-llm::generated_text">#4 Gemini LLM ({{generated_text}})</option>
+                                  </select>
+                                  {currentMap && (
+                                    <div className="flex items-center space-x-1 text-[9px] text-emerald-400 pt-0.5">
+                                      <CheckCircle2 className="w-3 h-3" />
+                                      <span>已映射至 &#123;&#123;{currentMap.sourceVariable}&#125;&#125;</span>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })
+                          ) : (
+                            <span className="text-[10px] text-slate-500">無可對應參數</span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </>
               )}
 
               {selectedNode.type === 'skill' && (
                 <>
                   <div>
-                    <label className="block text-slate-400 mb-1 font-medium">選擇 Agent Skill 模組 (已註冊技能 SOP)</label>
+                    <label className="block text-slate-400 mb-1 font-medium">選擇 Agent Skill 模組 (僅限已核准技能 SOP)</label>
                     <select
-                      value={selectedNode.config.skillId || skills[0]?.id}
+                      value={selectedNode.config.skillId || (skills.find((s) => s.reviewStatus === 'approved')?.id || '')}
                       onChange={(e) => {
                         const sk = skills.find((s) => s.id === e.target.value);
                         handleUpdateNodeConfig(selectedNode.id, {
@@ -754,7 +880,7 @@ export const BuilderView: React.FC<BuilderViewProps> = ({
                       }}
                       className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-purple-500"
                     >
-                      {skills.map((sk) => (
+                      {skills.filter((s) => s.reviewStatus === 'approved').map((sk) => (
                         <option key={sk.id} value={sk.id}>
                           {sk.name} ({sk.codeName})
                         </option>
@@ -784,7 +910,7 @@ export const BuilderView: React.FC<BuilderViewProps> = ({
                       <span className="text-[10px] text-blue-400">嵌套多 Agent 協作</span>
                     </label>
                     <select
-                      value={selectedNode.config.subAgentId || agents[0]?.id}
+                      value={selectedNode.config.subAgentId || (agents.find((a) => a.reviewStatus === 'approved')?.id || '')}
                       onChange={(e) => {
                         const ag = agents.find((a) => a.id === e.target.value);
                         handleUpdateNodeConfig(selectedNode.id, {
@@ -794,7 +920,7 @@ export const BuilderView: React.FC<BuilderViewProps> = ({
                       }}
                       className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-blue-500 font-mono text-xs"
                     >
-                      {agents.map((ag) => (
+                      {agents.filter((a) => a.reviewStatus === 'approved').map((ag) => (
                         <option key={ag.id} value={ag.id}>
                           {ag.name} ({ag.codeName}) - {ag.primaryModel}
                         </option>

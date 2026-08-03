@@ -8,6 +8,7 @@ import { RegistryView } from './components/views/RegistryView';
 import { PolicyView } from './components/views/PolicyView';
 import { PlaygroundView } from './components/views/PlaygroundView';
 import { AnalyticsView } from './components/views/AnalyticsView';
+import { ReviewQueueView } from './components/views/ReviewQueueView';
 import { CreateKeyModal } from './components/modals/CreateKeyModal';
 import { CreateMcpModal } from './components/modals/CreateMcpModal';
 import { CreateSkillModal } from './components/modals/CreateSkillModal';
@@ -58,7 +59,15 @@ export default function App() {
   const [isSkillModalOpen, setIsSkillModalOpen] = useState(false);
   const [isAgentModalOpen, setIsAgentModalOpen] = useState(false);
 
-  // Static deployment: all data is loaded from initialData, no backend API needed.
+  const currentUser = '資安合規官 (Reviewer)';
+  const [isDiscovering, setIsDiscovering] = useState<string | null>(null);
+
+  // Count pending items across agents, skills, mcpServers, tools
+  const pendingReviewsCount = 
+    agents.filter((a) => a.reviewStatus === 'pending_review').length +
+    skills.filter((s) => s.reviewStatus === 'pending_review').length +
+    mcpServers.filter((m) => m.reviewStatus === 'pending_review').length +
+    tools.filter((t) => t.reviewStatus === 'pending_review').length;
 
   // Handler: Issue Virtual Key (local-only)
   const handleCreateKey = async (keyData: {
@@ -92,7 +101,7 @@ export default function App() {
     setVirtualKeys((prev) => prev.filter((k) => k.id !== keyId));
   };
 
-  // Handler: Register MCP Target (local-only)
+  // Handler: Register MCP Target with Auto Tool Discovery
   const handleCreateMcp = async (serverData: {
     name: string;
     type: 'openapi' | 'smithy' | 'lambda' | 'mcp_jsonrpc' | 'postgres';
@@ -100,18 +109,96 @@ export default function App() {
     authType: 'oauth2' | 'bearer' | 'mtls' | 'none';
     description: string;
   }) => {
+    const serverId = `mcp-${Date.now().toString().slice(-4)}`;
     const localMcp: MCPServer = {
-      id: `mcp-${Date.now().toString().slice(-4)}`,
+      id: serverId,
       name: serverData.name,
       type: serverData.type,
       endpoint: serverData.endpoint,
       status: 'online',
-      latencyMs: 35,
-      toolsCount: 1,
+      latencyMs: 45,
+      toolsCount: 3,
       authType: serverData.authType,
       description: serverData.description,
+      reviewStatus: 'pending_review',
+      reviewRecord: {
+        submittedBy: 'DevOps Lead (Submitter)',
+        submittedAt: new Date().toISOString(),
+        version: 1,
+      },
+      discoveredToolsCount: 3,
+      approvedToolsCount: 0,
+      pendingToolsCount: 3,
     };
     setMcpServers((prev) => [localMcp, ...prev]);
+
+    // Requirement D: Auto-discover tools and create pending tools
+    const autoTools: Tool[] = [
+      {
+        id: `tool-auto-${Date.now()}-1`,
+        name: `${serverData.name.toLowerCase().replace(/\s+/g, '_')}_fetch_data`,
+        mcpServerId: serverId,
+        mcpServerName: serverData.name,
+        description: `從 ${serverData.name} 端點自動探索的數據檢索工具。`,
+        version: '1.0.0',
+        category: 'database',
+        scopeRequired: 'mcp:tool:execute:db',
+        enabled: false,
+        inputSchema: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'] },
+        outputSchema: { type: 'object', properties: { results: { type: 'array' } } },
+        timeoutSec: 5,
+        avgLatencyMs: 120,
+        reviewStatus: 'pending_review',
+        reviewRecord: { submittedBy: 'System (MCP Auto-Discovery)', submittedAt: new Date().toISOString(), version: 1 },
+        autoDiscovered: true,
+      },
+      {
+        id: `tool-auto-${Date.now()}-2`,
+        name: `${serverData.name.toLowerCase().replace(/\s+/g, '_')}_execute_action`,
+        mcpServerId: serverId,
+        mcpServerName: serverData.name,
+        description: `針對 ${serverData.name} 觸發自動化操作的核心工具。`,
+        version: '1.0.0',
+        category: 'system',
+        scopeRequired: 'mcp:tool:execute:code',
+        enabled: false,
+        inputSchema: { type: 'object', properties: { action: { type: 'string' }, payload: { type: 'object' } }, required: ['action'] },
+        outputSchema: { type: 'object', properties: { status: { type: 'string' } } },
+        timeoutSec: 10,
+        avgLatencyMs: 250,
+        reviewStatus: 'pending_review',
+        reviewRecord: { submittedBy: 'System (MCP Auto-Discovery)', submittedAt: new Date().toISOString(), version: 1 },
+        autoDiscovered: true,
+      },
+      {
+        id: `tool-auto-${Date.now()}-3`,
+        name: `${serverData.name.toLowerCase().replace(/\s+/g, '_')}_get_status`,
+        mcpServerId: serverId,
+        mcpServerName: serverData.name,
+        description: `檢查 ${serverData.name} 連線與伺服器健康狀態。`,
+        version: '1.0.0',
+        category: 'system',
+        scopeRequired: 'mcp:tool:execute:slack',
+        enabled: false,
+        inputSchema: { type: 'object', properties: { verbose: { type: 'boolean' } } },
+        outputSchema: { type: 'object', properties: { healthy: { type: 'boolean' } } },
+        timeoutSec: 3,
+        avgLatencyMs: 40,
+        reviewStatus: 'pending_review',
+        reviewRecord: { submittedBy: 'System (MCP Auto-Discovery)', submittedAt: new Date().toISOString(), version: 1 },
+        autoDiscovered: true,
+      },
+    ];
+    setTools((prev) => [...autoTools, ...prev]);
+  };
+
+  // Handler: Manual Trigger Tool Rediscovery
+  const handleDiscoverTools = (mcpServerId: string) => {
+    setIsDiscovering(mcpServerId);
+    setTimeout(() => {
+      setIsDiscovering(null);
+      alert('已完成 MCP 工具重新探索，已同步最新 tools/list 結果！');
+    }, 1500);
   };
 
   // Handler: Create Agent
@@ -120,6 +207,12 @@ export default function App() {
       ...agentData,
       id: `agent-${Date.now()}`,
       updatedAt: new Date().toISOString().split('T')[0],
+      reviewStatus: 'pending_review',
+      reviewRecord: {
+        submittedBy: 'Agent Developer (Submitter)',
+        submittedAt: new Date().toISOString(),
+        version: 1,
+      },
     };
     setAgents((prev) => [newAgent, ...prev]);
   };
@@ -131,8 +224,84 @@ export default function App() {
       id: `skill-${Date.now()}`,
       usageCount: 0,
       updatedAt: new Date().toISOString().split('T')[0],
+      reviewStatus: 'pending_review',
+      reviewRecord: {
+        submittedBy: 'Skill Author (Submitter)',
+        submittedAt: new Date().toISOString(),
+        version: 1,
+      },
     };
     setSkills((prev) => [newSkill, ...prev]);
+  };
+
+  // Review Mechanism Handlers
+  const handleApproveItem = (itemType: string, itemId: string) => {
+    const now = new Date().toISOString();
+    const comment = '審核通過，完成資安與權限檢核。已自動上線。';
+
+    if (itemType === 'agent') {
+      setAgents((prev) => prev.map((a) => a.id === itemId ? {
+        ...a, reviewStatus: 'approved',
+        reviewRecord: { ...a.reviewRecord!, reviewedBy: currentUser, reviewedAt: now, reviewComment: comment, reviewAction: 'approve' }
+      } : a));
+    } else if (itemType === 'skill') {
+      setSkills((prev) => prev.map((s) => s.id === itemId ? {
+        ...s, reviewStatus: 'approved', enabled: true,
+        reviewRecord: { ...s.reviewRecord!, reviewedBy: currentUser, reviewedAt: now, reviewComment: comment, reviewAction: 'approve' }
+      } : s));
+    } else if (itemType === 'mcp_server') {
+      setMcpServers((prev) => prev.map((m) => m.id === itemId ? {
+        ...m, reviewStatus: 'approved',
+        reviewRecord: { ...m.reviewRecord!, reviewedBy: currentUser, reviewedAt: now, reviewComment: comment, reviewAction: 'approve' }
+      } : m));
+    } else if (itemType === 'tool') {
+      setTools((prev) => prev.map((t) => t.id === itemId ? {
+        ...t, reviewStatus: 'approved', enabled: true,
+        reviewRecord: { ...t.reviewRecord!, reviewedBy: currentUser, reviewedAt: now, reviewComment: comment, reviewAction: 'approve' }
+      } : t));
+    }
+  };
+
+  const handleRejectItem = (itemType: string, itemId: string, comment: string) => {
+    const now = new Date().toISOString();
+    if (itemType === 'agent') {
+      setAgents((prev) => prev.map((a) => a.id === itemId ? {
+        ...a, reviewStatus: 'rejected',
+        reviewRecord: { ...a.reviewRecord!, reviewedBy: currentUser, reviewedAt: now, reviewComment: comment, reviewAction: 'reject' }
+      } : a));
+    } else if (itemType === 'skill') {
+      setSkills((prev) => prev.map((s) => s.id === itemId ? {
+        ...s, reviewStatus: 'rejected', enabled: false,
+        reviewRecord: { ...s.reviewRecord!, reviewedBy: currentUser, reviewedAt: now, reviewComment: comment, reviewAction: 'reject' }
+      } : s));
+    } else if (itemType === 'mcp_server') {
+      setMcpServers((prev) => prev.map((m) => m.id === itemId ? {
+        ...m, reviewStatus: 'rejected',
+        reviewRecord: { ...m.reviewRecord!, reviewedBy: currentUser, reviewedAt: now, reviewComment: comment, reviewAction: 'reject' }
+      } : m));
+    } else if (itemType === 'tool') {
+      setTools((prev) => prev.map((t) => t.id === itemId ? {
+        ...t, reviewStatus: 'rejected', enabled: false,
+        reviewRecord: { ...t.reviewRecord!, reviewedBy: currentUser, reviewedAt: now, reviewComment: comment, reviewAction: 'reject' }
+      } : t));
+    }
+  };
+
+  const handleRequestChanges = (itemType: string, itemId: string, comment: string) => {
+    const now = new Date().toISOString();
+    const updateRecord = (rec: any) => ({
+      ...rec, reviewedBy: currentUser, reviewedAt: now, reviewComment: `[要求補充說明] ${comment}`, reviewAction: 'request_changes' as const
+    });
+
+    if (itemType === 'agent') {
+      setAgents((prev) => prev.map((a) => a.id === itemId ? { ...a, reviewRecord: updateRecord(a.reviewRecord) } : a));
+    } else if (itemType === 'skill') {
+      setSkills((prev) => prev.map((s) => s.id === itemId ? { ...s, reviewRecord: updateRecord(s.reviewRecord) } : s));
+    } else if (itemType === 'mcp_server') {
+      setMcpServers((prev) => prev.map((m) => m.id === itemId ? { ...m, reviewRecord: updateRecord(m.reviewRecord) } : m));
+    } else if (itemType === 'tool') {
+      setTools((prev) => prev.map((t) => t.id === itemId ? { ...t, reviewRecord: updateRecord(t.reviewRecord) } : t));
+    }
   };
 
   // Handler: Toggle Agent Skill Enabled State
@@ -281,6 +450,7 @@ export default function App() {
         setActiveTab={setActiveTab}
         tracesCount={traces.length}
         activeKeysCount={virtualKeys.filter((k) => k.status === 'active').length}
+        pendingReviewsCount={pendingReviewsCount}
       />
 
       {/* Main Container */}
@@ -328,6 +498,21 @@ export default function App() {
             onOpenCreateAgentModal={() => setIsAgentModalOpen(true)}
             onToggleTool={handleToggleTool}
             onToggleSkill={handleToggleSkill}
+            onDiscoverTools={handleDiscoverTools}
+            isDiscovering={isDiscovering}
+          />
+        )}
+
+        {activeTab === 'reviews' && (
+          <ReviewQueueView
+            agents={agents}
+            skills={skills}
+            mcpServers={mcpServers}
+            tools={tools}
+            currentUser={currentUser}
+            onApprove={handleApproveItem}
+            onReject={handleRejectItem}
+            onRequestChanges={handleRequestChanges}
           />
         )}
 

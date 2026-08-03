@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Agent, AgentSkill, MCPServer, Tool } from '../../types';
+import { Agent, AgentSkill, MCPServer, ReviewStatus, Tool } from '../../types';
 import { formatLatency } from '../../lib/formatters';
 import { 
   Cpu, 
@@ -19,7 +19,10 @@ import {
   BookOpen,
   Terminal,
   Zap,
-  Sliders
+  Sliders,
+  RefreshCw,
+  Filter,
+  Loader2
 } from 'lucide-react';
 
 interface RegistryViewProps {
@@ -32,7 +35,18 @@ interface RegistryViewProps {
   onOpenCreateAgentModal: () => void;
   onToggleTool: (toolId: string, enabled: boolean) => void;
   onToggleSkill: (skillId: string, enabled: boolean) => void;
+  onDiscoverTools?: (mcpServerId: string) => void;
+  isDiscovering?: string | null;
 }
+
+const getReviewStatusBadge = (status: ReviewStatus) => {
+  switch (status) {
+    case 'draft': return <span className="px-2 py-0.5 text-[10px] font-mono font-bold uppercase rounded bg-slate-800 text-slate-400 border border-slate-700">草稿</span>;
+    case 'pending_review': return <span className="px-2 py-0.5 text-[10px] font-mono font-bold uppercase rounded bg-amber-950 text-amber-400 border border-amber-800">待審核</span>;
+    case 'approved': return <span className="px-2 py-0.5 text-[10px] font-mono font-bold uppercase rounded bg-emerald-950 text-emerald-400 border border-emerald-800">已核准</span>;
+    case 'rejected': return <span className="px-2 py-0.5 text-[10px] font-mono font-bold uppercase rounded bg-red-950 text-red-400 border border-red-800">已退回</span>;
+  }
+};
 
 export const RegistryView: React.FC<RegistryViewProps> = ({
   agents,
@@ -44,25 +58,32 @@ export const RegistryView: React.FC<RegistryViewProps> = ({
   onOpenCreateAgentModal,
   onToggleTool,
   onToggleSkill,
+  onDiscoverTools,
+  isDiscovering,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedToolSchema, setSelectedToolSchema] = useState<Tool | null>(tools[0] || null);
-  const [selectedSkill, setSelectedSkill] = useState<AgentSkill | null>(skills[0] || null);
+  const [selectedToolSchema, setSelectedToolSchema] = useState<Tool | null>(tools.find(t => t.reviewStatus === 'approved') || tools[0] || null);
+  const [selectedSkill, setSelectedSkill] = useState<AgentSkill | null>(skills.find(s => s.reviewStatus === 'approved') || skills[0] || null);
   const [activeTab, setActiveTab] = useState<'skills' | 'tools' | 'mcp' | 'agents'>('skills');
   const [copiedAgentId, setCopiedAgentId] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<'all' | ReviewStatus>('all');
 
-  const filteredSkills = skills.filter((s) =>
-    s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    s.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    s.codeName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    s.category.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredSkills = skills.filter((s) => {
+    const matchesSearch = s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      s.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      s.codeName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      s.category.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesStatus = statusFilter === 'all' || s.reviewStatus === statusFilter;
+    return matchesSearch && matchesStatus;
+  });
 
-  const filteredTools = tools.filter((t) =>
-    t.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    t.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    t.mcpServerName.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredTools = tools.filter((t) => {
+    const matchesSearch = t.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      t.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      t.mcpServerName.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesStatus = statusFilter === 'all' || t.reviewStatus === statusFilter;
+    return matchesSearch && matchesStatus;
+  });
 
   const categoryBadge: Record<AgentSkill['category'], { label: string; color: string }> = {
     code_execution: { label: '代碼沙盒', color: 'bg-emerald-950 text-emerald-300 border-emerald-800' },
@@ -72,6 +93,14 @@ export const RegistryView: React.FC<RegistryViewProps> = ({
     web_search: { label: '網路檢索', color: 'bg-purple-950 text-purple-300 border-purple-800' },
     communication: { label: '頻道通訊', color: 'bg-indigo-950 text-indigo-300 border-indigo-800' },
   };
+
+  const statusFilterOptions = [
+    { value: 'all' as const, label: '全部' },
+    { value: 'approved' as const, label: '已核准' },
+    { value: 'pending_review' as const, label: '待審核' },
+    { value: 'rejected' as const, label: '已退回' },
+    { value: 'draft' as const, label: '草稿' },
+  ];
 
   return (
     <div className="space-y-8 animate-fadeIn">
@@ -187,7 +216,7 @@ export const RegistryView: React.FC<RegistryViewProps> = ({
                       isSelected
                         ? 'bg-purple-950/40 border-purple-500 text-white shadow-lg'
                         : 'bg-slate-900 border-slate-800 text-slate-300 hover:border-slate-700'
-                    }`}
+                    } ${skill.reviewStatus !== 'approved' ? 'opacity-70' : ''}`}
                   >
                     <div className="flex items-start justify-between mb-1.5">
                       <div className="flex items-center space-x-2.5">
@@ -205,19 +234,7 @@ export const RegistryView: React.FC<RegistryViewProps> = ({
                         </div>
                       </div>
 
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onToggleSkill(skill.id, !skill.enabled);
-                        }}
-                        className={`px-2 py-1 rounded text-[10px] font-mono font-bold uppercase transition-colors ${
-                          skill.enabled
-                            ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
-                            : 'bg-slate-800 text-slate-500 border border-slate-700'
-                        }`}
-                      >
-                        {skill.enabled ? '已啟用' : '已停用'}
-                      </button>
+                      {getReviewStatusBadge(skill.reviewStatus)}
                     </div>
 
                     <p className="text-xs text-slate-400 line-clamp-2 mb-2">{skill.description}</p>
@@ -330,7 +347,7 @@ export const RegistryView: React.FC<RegistryViewProps> = ({
                       isSelected
                         ? 'bg-indigo-950/40 border-indigo-500 text-white shadow-lg'
                         : 'bg-slate-900 border-slate-800 text-slate-300 hover:border-slate-700'
-                    }`}
+                    } ${tool.reviewStatus !== 'approved' ? 'opacity-70' : ''}`}
                   >
                     <div className="flex items-start justify-between mb-1.5">
                       <div className="flex items-center space-x-2">
@@ -344,19 +361,7 @@ export const RegistryView: React.FC<RegistryViewProps> = ({
                       </div>
 
                       <div className="flex items-center space-x-2">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onToggleTool(tool.id, !tool.enabled);
-                          }}
-                          className={`px-2 py-1 rounded text-[10px] font-mono font-bold uppercase transition-colors ${
-                            tool.enabled
-                              ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
-                              : 'bg-slate-800 text-slate-500 border border-slate-700'
-                          }`}
-                        >
-                          {tool.enabled ? '已啟用' : '已停用'}
-                        </button>
+                        {getReviewStatusBadge(tool.reviewStatus)}
                       </div>
                     </div>
 
@@ -435,10 +440,7 @@ export const RegistryView: React.FC<RegistryViewProps> = ({
                   <h3 className="font-bold text-white text-base mt-1">{server.name}</h3>
                 </div>
 
-                <div className="flex items-center space-x-1 text-emerald-400 bg-emerald-950/60 border border-emerald-800 px-2 py-0.5 rounded-full text-[11px] font-semibold">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                  <span>在線</span>
-                </div>
+                {getReviewStatusBadge(server.reviewStatus)}
               </div>
 
               <p className="text-xs text-slate-400">{server.description}</p>
@@ -446,6 +448,28 @@ export const RegistryView: React.FC<RegistryViewProps> = ({
               <div className="bg-slate-950 border border-slate-800 rounded-lg p-2.5 font-mono text-xs text-indigo-300 truncate">
                 {server.endpoint}
               </div>
+
+              {/* Discovered tools count */}
+              {(server.discoveredToolsCount ?? 0) > 0 && (
+                <div className="bg-slate-950/80 border border-slate-800 rounded-lg p-2 text-[11px] font-mono text-slate-300 flex items-center justify-between">
+                  <span>已發現 <strong className="text-indigo-300">{server.discoveredToolsCount}</strong> 個工具</span>
+                  <span>{server.approvedToolsCount ?? 0} 已核准 / {server.pendingToolsCount ?? 0} 待審核</span>
+                </div>
+              )}
+
+              {onDiscoverTools && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); onDiscoverTools(server.id); }}
+                  disabled={isDiscovering === server.id}
+                  className="w-full flex items-center justify-center space-x-1.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-300 border border-slate-700 px-2.5 py-1.5 rounded-lg text-xs font-medium transition"
+                >
+                  {isDiscovering === server.id ? (
+                    <><Loader2 className="w-3.5 h-3.5 animate-spin" /><span>探索中...</span></>
+                  ) : (
+                    <><RefreshCw className="w-3.5 h-3.5 text-indigo-400" /><span>重新探索工具清單</span></>
+                  )}
+                </button>
+              )}
 
               <div className="pt-2 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400 font-mono">
                 <span>延遲：{formatLatency(server.latencyMs)}</span>
@@ -496,13 +520,7 @@ export const RegistryView: React.FC<RegistryViewProps> = ({
                       </div>
 
                       <div className="flex flex-col items-end space-y-1">
-                        <span className={`px-2 py-0.5 text-[10px] font-mono rounded-full font-bold border ${
-                          agent.status === 'deployed' 
-                            ? 'bg-emerald-950 text-emerald-400 border-emerald-800' 
-                            : 'bg-amber-950 text-amber-400 border-amber-800'
-                        }`}>
-                          {agent.status === 'deployed' ? '已線上部署' : '預發布 Staging'}
-                        </span>
+                        {getReviewStatusBadge(agent.reviewStatus)}
                         <span className={`px-1.5 py-0.2 text-[9px] font-mono rounded ${
                           isFlowBuilt ? 'bg-purple-950/80 text-purple-300 border border-purple-800' : 'bg-blue-950/80 text-blue-300 border border-blue-800'
                         }`}>

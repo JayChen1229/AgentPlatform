@@ -11,7 +11,8 @@ import {
   Zap,
   Globe,
   KeyRound,
-  Workflow
+  Workflow,
+  ClipboardCheck
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -19,6 +20,7 @@ interface NavbarProps {
   setActiveTab: (tab: ActiveTab) => void;
   tracesCount: number;
   activeKeysCount: number;
+  pendingReviewsCount: number;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -26,12 +28,14 @@ export const Navbar: React.FC<NavbarProps> = ({
   setActiveTab,
   tracesCount,
   activeKeysCount,
+  pendingReviewsCount,
 }) => {
   const tabs: { id: ActiveTab; label: string; icon: React.ComponentType<{ className?: string }>; badge?: string | number; benchmark: string; isOpenSource: boolean; category: 'build' | 'govern' }[] = [
     { id: 'builder', label: '視覺化建構器 (Flow)', icon: Workflow, badge: 'Low-Code', benchmark: 'Langflow / Dify', isOpenSource: true, category: 'build' },
     { id: 'gateway', label: '網關與路由', icon: Network, badge: activeKeysCount, benchmark: 'LiteLLM / Portkey', isOpenSource: true, category: 'govern' },
     { id: 'traces', label: '可觀測性與追蹤', icon: Activity, badge: tracesCount, benchmark: 'Langfuse v3', isOpenSource: true, category: 'govern' },
     { id: 'registry', label: 'Agent 與工具註冊表', icon: Cpu, benchmark: 'TrueFoundry / AgentCore', isOpenSource: false, category: 'govern' },
+    { id: 'reviews', label: '審核佇列', icon: ClipboardCheck, badge: pendingReviewsCount > 0 ? pendingReviewsCount : undefined, benchmark: 'Governance Workflow', isOpenSource: false, category: 'govern' },
     { id: 'policy', label: '策略與權限治理', icon: ShieldCheck, badge: '21 權限點', benchmark: 'Cedar-OPA / Loom', isOpenSource: false, category: 'govern' },
     { id: 'playground', label: 'Agent 測試場', icon: Terminal, benchmark: 'LangSmith / Portkey', isOpenSource: false, category: 'govern' },
     { id: 'analytics', label: '成本與數據分析', icon: BarChart3, benchmark: 'Langfuse / Portkey', isOpenSource: true, category: 'govern' },
@@ -116,6 +120,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           {tabs.filter(t => t.category === 'govern').map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
+            const isReviewTab = tab.id === 'reviews';
             return (
               <button
                 key={tab.id}
@@ -132,7 +137,11 @@ export const Navbar: React.FC<NavbarProps> = ({
 
                 {tab.badge !== undefined && (
                   <span className={`ml-1 px-1.5 py-0.5 text-[10px] font-mono rounded-full font-bold ${
-                    isActive ? 'bg-blue-800 text-blue-100' : 'bg-slate-800 text-slate-300 border border-slate-700'
+                    isActive 
+                      ? 'bg-blue-800 text-blue-100' 
+                      : isReviewTab && pendingReviewsCount > 0
+                        ? 'bg-amber-900 text-amber-200 border border-amber-700 animate-pulse'
+                        : 'bg-slate-800 text-slate-300 border border-slate-700'
                   }`}>
                     {tab.badge}
                   </span>
@@ -154,4 +163,3 @@ export const Navbar: React.FC<NavbarProps> = ({
     </header>
   );
 };
-

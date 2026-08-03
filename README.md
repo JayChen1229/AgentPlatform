@@ -8,18 +8,18 @@
 
 ## 📌 平台定位
 
-本平台是一套**企業級 AI Agent 全生命週期管理平台**，從**視覺化建構 → 模型路由 → 可觀測性追蹤 → 工具與 Agent 註冊表 → 策略權限治理 → 即時測試場 → 成本分析**，涵蓋 Agent 的 Build（開發面）與 Govern（治理面）共 **7 大模組**。
+本平台是一套**企業級 AI Agent 全生命週期管理平台**，從**視覺化建構 → 模型路由 → 可觀測性追蹤 → Agent 與工具註冊表 → 審核佇列 → 策略權限治理 → 即時測試場 → 成本分析**，涵蓋 Agent 的 Build（開發面）與 Govern（治理面）共 **8 大模組**。
 
 ### 🎯 核心架構理念
 
 | 層級 | 能力 | 對標產品 |
 |------|------|----------|
 | **Build 開發面** | 視覺化 Flow 拖拉建構、RAG 知識庫、版本發佈 | Langflow / Dify / Flowise |
-| **Govern 治理面** | 網關路由、追蹤、註冊表、策略、測試場、分析 | LiteLLM + Langfuse + AgentCore + Cedar-OPA |
+| **Govern 治理面** | 網關路由、追蹤、註冊表、審核佇列、策略、測試場、分析 | LiteLLM + Langfuse + AgentCore + Cedar-OPA |
 
 ---
 
-## 🗂️ 七大功能模組詳細介紹
+## 🗂️ 八大功能模組詳細介紹
 
 ---
 
@@ -156,58 +156,62 @@
 - 🔒 **SOC2 PII Sanitizer** — 敏感資料自動脫敏
 - 🌐 **Web Search & Scraper** — 即時搜尋與網頁內文提煉
 
-##### 4.2 MCP 工具服務器
+##### 4.2 MCP 工具服務器與自動探索
 
 | 功能 | 說明 |
 |------|------|
-| **服務器卡片展示** | 顯示服務器名稱、類型（OpenAPI / Smithy / Lambda / MCP JSON-RPC / Postgres）、端點 URL、狀態（🟢 online / 🔴 offline / 🟡 warning）、延遲、工具數、認證方式 |
+| **服務器卡片展示** | 顯示服務器名稱、類型（OpenAPI / Smithy / Lambda / MCP JSON-RPC / Postgres）、端點 URL、狀態（🟢 online / 🔴 offline / 🟡 warning）、延遲、工具數、認證方式、審核狀態徽章 |
+| **已發現工具數統計** | 顯示伺服器已自動發現的工具總數、已核准數與待審核數 |
+| **MCP 自動工具探索 (tools/list)** | 註冊 MCP 服務器時自動觸發 `tools/list` 探索，解析 schema 建立待審核工具卡片；支援手動「重新探索」重試 |
 | **認證類型** | 支援 OAuth2、Bearer Token、mTLS、無認證四種模式 |
-| **新增 MCP 服務器 Modal** | 表單填寫名稱、類型、端點、認證方式、描述 |
-
-**內建服務器範例**:
-- **AgentCore 核心網關 (Smithy)** — mTLS 認證，42ms 延遲
-- **總帳 PostgreSQL MCP** — 直接 SQL 執行
-- **Slack Ops 運維 MCP** — OAuth2 頻道管理
-- **Qdrant 知識庫向量 MCP** — Lambda 部署的向量檢索
-- **GitHub 代碼運維 MCP** — Pull Request 自動化
+| **新增 MCP 服務器 Modal** | 表單填寫名稱、類型、端點、認證方式、描述，提交後觸發探索並進入待審核狀態 |
 
 ##### 4.3 工具管理 (Tools)
 
 | 功能 | 說明 |
 |------|------|
-| **工具列表** | 顯示工具名稱、所屬 MCP 服務器、類別、版本、所需權限點、啟停狀態、超時設定、平均延遲 |
-| **Input / Output Schema** | JSON Schema 格式定義工具的輸入參數與輸出格式 |
-| **啟用/停用開關** | 一鍵啟停工具 |
-
-**內建工具範例**:
-- `db_search_user_ledger` — 總帳查詢
-- `slack_post_channel` — Slack 訊息發佈
-- `vector_search_policies` — 向量語意檢索
-- `github_create_pull_request` — GitHub PR 建立
+| **工具列表與狀態徽章** | 顯示工具名稱、所屬 MCP 服務器、類別、版本、所需權限點、審核狀態徽章（草稿 / 待審核 / 已核准 / 已退回）、平均延遲 |
+| **Input / Output Schema** | JSON Schema 格式定義工具的輸入參數與輸出格式（唯讀檢視） |
+| **狀態過濾與自動探索標記** | 支援按審核狀態篩選工具，並標記由 MCP 自動探索建立的項目 |
 
 ##### 4.4 Agent 管理
 
 | 功能 | 說明 |
 |------|------|
-| **Agent 卡片展示** | 顯示名稱、代碼名、描述、主要模型、所屬團隊、狀態（deployed / staging / deprecated）、分配工具、虛擬金鑰綁定、安全護欄啟用狀態 |
+| **Agent 卡片展示** | 顯示名稱、代碼名、描述、主要模型、所屬團隊、狀態（deployed / staging / deprecated）、審核狀態徽章、分配工具、虛擬金鑰綁定、安全護欄啟用狀態 |
 | **System Prompt 預覽** | 可查看每個 Agent 的完整 System Prompt |
-| **新增 Agent Modal** | 表單填寫名稱、代碼名、描述、主模型、團隊、工具分配、虛擬金鑰、System Prompt、護欄開關 |
-
-**內建 Agent 範例**:
-- 🤖 **FinOps 總帳審計 Agent** — 自動核對總帳、發送異常警報
-- 🛡️ **資安分流處置機器人** — CVE 監控、自動修補 PR
-- 💬 **客戶服務禮賓 Agent** — 政策查詢與帳戶檢索
+| **新增 Agent Modal** | 表單填寫名稱、代碼名、描述、主模型、團隊、工具分配、虛擬金鑰、System Prompt、護欄開關，提交後自動進入待審核 |
 
 #### 競品對標分析
 
 | 功能 | 本平台 | TrueFoundry | AWS AgentCore | Composio |
 |------|--------|-------------|---------------|----------|
-| Agent 註冊與管理 | ✅ | ✅ | ✅ | ⚠️ 有限 |
-| MCP 服務器註冊 | ✅ | ⚠️ 有限 | ✅ | ✅ |
-| 工具 Schema 檢視 | ✅ | ✅ | ✅ | ✅ |
+| Agent 註冊與審核 | ✅ | ✅ | ✅ | ⚠️ 有限 |
+| MCP 服務器註冊與自動探索 | ✅ | ⚠️ 有限 | ✅ | ✅ |
+| 工具 Schema 檢視與參數映射 | ✅ | ✅ | ✅ | ✅ |
 | Skill 擴充包系統 | ✅ | ❌ | ⚠️ 有限 | ❌ |
-| 啟停控制 (Kill Switch) | ✅ | ✅ | ✅ | ⚠️ 有限 |
+| 註冊審核工作流 (Approval Workflow) | ✅ | ⚠️ 有限 | ❌ (需自建 IAM) | ❌ |
 | 多認證模式 (OAuth2/mTLS) | ✅ | ✅ | ✅ | ✅ |
+
+---
+
+### 模組五：📋 審核佇列 (Review Queue & Approval Workflow)
+
+> **對標平台**: [AWS IAM / Cedar Governance](https://aws.amazon.com/iam/) / [Permit.io Approval Flows](https://www.permit.io/) / [ServiceNow IT Governance](https://www.servicenow.com/)
+
+#### 功能概述
+
+所有新註冊的 Agent、Agent Skill、MCP 服務器與工具預設處於「待審核 (Pending Review)」狀態，不可在 Build 畫布中選用或上線。資安與治理團隊透過審核佇列進行全方位合規檢視，執行核准、退回或要求補充說明。
+
+#### 詳細功能清單
+
+| 功能 | 說明 |
+|------|------|
+| **狀態機轉換** | 草稿 (Draft) → 待審核 (Pending Review) → 已核准 (Approved) / 已退回 (Rejected) |
+| **統一審核佇列** | 單一畫面整合 Agent、Skill、MCP Server 與 Tool 四類待審核與歷史審核紀錄 |
+| **迴避原則 (Self-Review Guard)** | 提交者不可審核自己提交的項目，系統自動禁用審核按鈕並提示警示 |
+| **審核決策動作** | 支援「✅ 核准」（自動上線並記錄 audit log）、「❌ 退回」（需填寫退回原因）、「💬 要求補充說明」 |
+| **詳細合規檢視** | 審核面板提供連線端點、認證方式、inputSchema / outputSchema、所需權限點（`mcp:tool:execute:*`） |
 
 ---
 

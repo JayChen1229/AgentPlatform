@@ -1,4 +1,15 @@
-import { Agent, AgentSkill, FallbackRule, FlowEdge, FlowNode, FlowReleaseVersion, GuardrailConfig, KnowledgeBase, MCPServer, ModelProvider, PermissionScope, RoleBinding, Tool, Trace, VirtualKey } from '../types';
+import { Agent, AgentSkill, FallbackRule, FlowEdge, FlowNode, FlowReleaseVersion, GuardrailConfig, KnowledgeBase, MCPServer, ModelProvider, PermissionScope, ReviewRecord, RoleBinding, Tool, Trace, VirtualKey } from '../types';
+
+// Shared approved review record template
+const approvedReview = (by: string, date: string, ver: number = 1): ReviewRecord => ({
+  submittedBy: by,
+  submittedAt: date,
+  reviewedBy: '資安合規官 (Reviewer)',
+  reviewedAt: date,
+  reviewComment: '審核通過，符合企業安全規範。',
+  reviewAction: 'approve',
+  version: ver,
+});
 
 export const INITIAL_SKILLS: AgentSkill[] = [
   {
@@ -19,6 +30,8 @@ export const INITIAL_SKILLS: AgentSkill[] = [
     enabled: true,
     usageCount: 1420,
     updatedAt: '2026-07-28',
+    reviewStatus: 'approved',
+    reviewRecord: approvedReview('Alex Cheng', '2026-07-20'),
   },
   {
     id: 'skill-02',
@@ -38,6 +51,8 @@ export const INITIAL_SKILLS: AgentSkill[] = [
     enabled: true,
     usageCount: 890,
     updatedAt: '2026-07-25',
+    reviewStatus: 'approved',
+    reviewRecord: approvedReview('Sarah Lin', '2026-07-18'),
   },
   {
     id: 'skill-03',
@@ -57,6 +72,8 @@ export const INITIAL_SKILLS: AgentSkill[] = [
     enabled: true,
     usageCount: 3250,
     updatedAt: '2026-07-29',
+    reviewStatus: 'approved',
+    reviewRecord: approvedReview('James Wu', '2026-07-22'),
   },
   {
     id: 'skill-04',
@@ -75,6 +92,64 @@ export const INITIAL_SKILLS: AgentSkill[] = [
     enabled: true,
     usageCount: 2100,
     updatedAt: '2026-07-20',
+    reviewStatus: 'approved',
+    reviewRecord: approvedReview('Emily Zhang', '2026-07-15'),
+  },
+  // Pending review sample
+  {
+    id: 'skill-05',
+    name: '多語系即時翻譯與本地化 Skill',
+    codeName: 'i18n_translator_skill',
+    category: 'data_processing',
+    description: '自動偵測輸入語言並翻譯為指定目標語言，支援 120+ 語系，含專業術語表比對與品牌語氣校正。',
+    version: 'v1.0.0',
+    author: 'R&D Labs (Kevin Huang)',
+    systemPromptInstruction: '你具備即時多語翻譯能力。翻譯時保留原始格式、專有名詞不翻譯、並在不確定處標註 [需人工覆核]。',
+    requiredTools: ['tool-translation-api'],
+    parametersSchema: {
+      source_language: 'auto',
+      target_language: 'zh-TW',
+      preserve_formatting: true,
+      glossary_id: 'enterprise-glossary-v1',
+    },
+    enabled: false,
+    usageCount: 0,
+    updatedAt: '2026-08-01',
+    reviewStatus: 'pending_review',
+    reviewRecord: {
+      submittedBy: 'Kevin Huang (R&D Labs)',
+      submittedAt: '2026-08-01T09:30:00Z',
+      version: 1,
+    },
+  },
+  // Rejected sample
+  {
+    id: 'skill-06',
+    name: '員工薪資查詢 Skill (已退回)',
+    codeName: 'salary_lookup_skill',
+    category: 'data_processing',
+    description: '直接查詢員工薪資資料庫並回傳明細，供 HR Agent 使用。',
+    version: 'v0.1.0',
+    author: 'HR IT Team (Tom Lee)',
+    systemPromptInstruction: '你可以直接存取薪資資料庫，回傳員工的薪資明細。',
+    requiredTools: ['tool-hr-db'],
+    parametersSchema: {
+      include_bonus: true,
+      include_deductions: true,
+    },
+    enabled: false,
+    usageCount: 0,
+    updatedAt: '2026-07-30',
+    reviewStatus: 'rejected',
+    reviewRecord: {
+      submittedBy: 'Tom Lee (HR IT Team)',
+      submittedAt: '2026-07-28T14:00:00Z',
+      reviewedBy: '資安合規官 (Reviewer)',
+      reviewedAt: '2026-07-29T10:15:00Z',
+      reviewComment: '此 Skill 直接存取未脫敏的薪資資料，違反 PII 政策 (data:read:raw_unmasked)。請先整合 SOC2 PII 脫敏 Skill 再重新送審。',
+      reviewAction: 'reject',
+      version: 1,
+    },
   },
 ];
 
@@ -366,6 +441,11 @@ export const INITIAL_MCP_SERVERS: MCPServer[] = [
     toolsCount: 6,
     authType: 'mtls',
     description: '核心微服務目標映射器，將 OpenAPI 與 Smithy 規範轉譯為 MCP 工具結構。',
+    reviewStatus: 'approved',
+    reviewRecord: approvedReview('Alex Cheng', '2026-06-10'),
+    discoveredToolsCount: 6,
+    approvedToolsCount: 6,
+    pendingToolsCount: 0,
   },
   {
     id: 'mcp-postgres',
@@ -377,6 +457,11 @@ export const INITIAL_MCP_SERVERS: MCPServer[] = [
     toolsCount: 4,
     authType: 'bearer',
     description: '供財務總帳審計紀錄使用的直接 SQL 執行與安全檢視表查詢。',
+    reviewStatus: 'approved',
+    reviewRecord: approvedReview('Sarah Lin', '2026-06-15'),
+    discoveredToolsCount: 4,
+    approvedToolsCount: 4,
+    pendingToolsCount: 0,
   },
   {
     id: 'mcp-slack',
@@ -388,6 +473,11 @@ export const INITIAL_MCP_SERVERS: MCPServer[] = [
     toolsCount: 5,
     authType: 'oauth2',
     description: '發布更新通知、管理資安事件應變頻道並觸發警報討論串。',
+    reviewStatus: 'approved',
+    reviewRecord: approvedReview('James Wu', '2026-06-20'),
+    discoveredToolsCount: 5,
+    approvedToolsCount: 5,
+    pendingToolsCount: 0,
   },
   {
     id: 'mcp-vector',
@@ -399,6 +489,11 @@ export const INITIAL_MCP_SERVERS: MCPServer[] = [
     toolsCount: 3,
     authType: 'bearer',
     description: '跨公司政策手冊、合規文檔與代碼庫進行密集向量語意檢索。',
+    reviewStatus: 'approved',
+    reviewRecord: approvedReview('Emily Zhang', '2026-06-25'),
+    discoveredToolsCount: 3,
+    approvedToolsCount: 3,
+    pendingToolsCount: 0,
   },
   {
     id: 'mcp-github',
@@ -410,6 +505,32 @@ export const INITIAL_MCP_SERVERS: MCPServer[] = [
     toolsCount: 8,
     authType: 'bearer',
     description: '自動建立 Pull Request、修補資安漏洞並生成版本發布說明。',
+    reviewStatus: 'approved',
+    reviewRecord: approvedReview('Alex Cheng', '2026-07-01'),
+    discoveredToolsCount: 8,
+    approvedToolsCount: 8,
+    pendingToolsCount: 0,
+  },
+  // Pending review MCP server
+  {
+    id: 'mcp-salesforce',
+    name: 'Salesforce CRM MCP 網關',
+    type: 'openapi',
+    endpoint: 'https://salesforce.internal.net/mcp/v1',
+    status: 'online',
+    latencyMs: 155,
+    toolsCount: 0,
+    authType: 'oauth2',
+    description: '整合 Salesforce CRM 客戶資料、商機追蹤與自動化銷售報表生成。',
+    reviewStatus: 'pending_review',
+    reviewRecord: {
+      submittedBy: 'Mike Chen (Sales Engineering)',
+      submittedAt: '2026-08-02T11:00:00Z',
+      version: 1,
+    },
+    discoveredToolsCount: 3,
+    approvedToolsCount: 0,
+    pendingToolsCount: 3,
   },
 ];
 
@@ -442,6 +563,9 @@ export const INITIAL_TOOLS: Tool[] = [
     },
     timeoutSec: 5,
     avgLatencyMs: 65,
+    reviewStatus: 'approved',
+    reviewRecord: approvedReview('Sarah Lin', '2026-06-15'),
+    autoDiscovered: true,
   },
   {
     id: 'tool-slack-post',
@@ -471,6 +595,9 @@ export const INITIAL_TOOLS: Tool[] = [
     },
     timeoutSec: 3,
     avgLatencyMs: 120,
+    reviewStatus: 'approved',
+    reviewRecord: approvedReview('James Wu', '2026-06-20'),
+    autoDiscovered: true,
   },
   {
     id: 'tool-qdrant-search',
@@ -499,6 +626,9 @@ export const INITIAL_TOOLS: Tool[] = [
     },
     timeoutSec: 4,
     avgLatencyMs: 45,
+    reviewStatus: 'approved',
+    reviewRecord: approvedReview('Emily Zhang', '2026-06-25'),
+    autoDiscovered: true,
   },
   {
     id: 'tool-github-pr',
@@ -529,6 +659,119 @@ export const INITIAL_TOOLS: Tool[] = [
     },
     timeoutSec: 10,
     avgLatencyMs: 380,
+    reviewStatus: 'approved',
+    reviewRecord: approvedReview('Alex Cheng', '2026-07-01'),
+    autoDiscovered: true,
+  },
+  // Auto-discovered pending tools from Salesforce MCP
+  {
+    id: 'tool-sf-contacts',
+    name: 'salesforce_query_contacts',
+    mcpServerId: 'mcp-salesforce',
+    mcpServerName: 'Salesforce CRM MCP 網關',
+    description: '查詢 Salesforce CRM 中的客戶聯絡人資料，支援 SOQL 語法篩選。',
+    version: '1.0.0',
+    category: 'database',
+    scopeRequired: 'mcp:tool:execute:db',
+    enabled: false,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        soqlQuery: { type: 'string', description: 'SOQL 查詢語句' },
+        limit: { type: 'integer', default: 20 },
+      },
+      required: ['soqlQuery'],
+    },
+    outputSchema: {
+      type: 'object',
+      properties: {
+        records: { type: 'array' },
+        totalSize: { type: 'integer' },
+      },
+    },
+    timeoutSec: 8,
+    avgLatencyMs: 180,
+    reviewStatus: 'pending_review',
+    reviewRecord: {
+      submittedBy: 'System (MCP Auto-Discovery)',
+      submittedAt: '2026-08-02T11:01:00Z',
+      version: 1,
+      changeReason: 'MCP tools/list 自動探索建立',
+    },
+    autoDiscovered: true,
+  },
+  {
+    id: 'tool-sf-opportunities',
+    name: 'salesforce_list_opportunities',
+    mcpServerId: 'mcp-salesforce',
+    mcpServerName: 'Salesforce CRM MCP 網關',
+    description: '列出指定帳戶下所有商機 (Opportunity)，含成交階段與金額預測。',
+    version: '1.0.0',
+    category: 'finance',
+    scopeRequired: 'mcp:tool:execute:finance',
+    enabled: false,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        accountId: { type: 'string', description: 'Salesforce Account ID' },
+        stage: { type: 'string', enum: ['Prospecting', 'Qualification', 'Negotiation', 'Closed Won', 'Closed Lost'] },
+      },
+      required: ['accountId'],
+    },
+    outputSchema: {
+      type: 'object',
+      properties: {
+        opportunities: { type: 'array' },
+        totalValue: { type: 'number' },
+      },
+    },
+    timeoutSec: 6,
+    avgLatencyMs: 210,
+    reviewStatus: 'pending_review',
+    reviewRecord: {
+      submittedBy: 'System (MCP Auto-Discovery)',
+      submittedAt: '2026-08-02T11:01:00Z',
+      version: 1,
+      changeReason: 'MCP tools/list 自動探索建立',
+    },
+    autoDiscovered: true,
+  },
+  {
+    id: 'tool-sf-reports',
+    name: 'salesforce_generate_report',
+    mcpServerId: 'mcp-salesforce',
+    mcpServerName: 'Salesforce CRM MCP 網關',
+    description: '基於預定義報表模板生成銷售績效摘要報告。',
+    version: '1.0.0',
+    category: 'database',
+    scopeRequired: 'mcp:tool:execute:db',
+    enabled: false,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        reportTemplateId: { type: 'string', description: '報表模板 ID' },
+        dateRange: { type: 'string', description: '日期範圍，如 last_30_days' },
+        format: { type: 'string', enum: ['json', 'csv', 'pdf'] },
+      },
+      required: ['reportTemplateId'],
+    },
+    outputSchema: {
+      type: 'object',
+      properties: {
+        reportUrl: { type: 'string' },
+        summary: { type: 'object' },
+      },
+    },
+    timeoutSec: 15,
+    avgLatencyMs: 420,
+    reviewStatus: 'pending_review',
+    reviewRecord: {
+      submittedBy: 'System (MCP Auto-Discovery)',
+      submittedAt: '2026-08-02T11:01:00Z',
+      version: 1,
+      changeReason: 'MCP tools/list 自動探索建立',
+    },
+    autoDiscovered: true,
   },
 ];
 
@@ -546,6 +789,8 @@ export const INITIAL_AGENTS: Agent[] = [
     systemPrompt: '你是一位嚴謹的財務審計 Agent。請搜尋總帳條目，核對金額計算，並將發現結果發布至 Slack。',
     guardrailsEnabled: true,
     updatedAt: '2026-07-28',
+    reviewStatus: 'approved',
+    reviewRecord: approvedReview('Alex Cheng', '2026-07-15'),
   },
   {
     id: 'agent-secops',
@@ -560,6 +805,8 @@ export const INITIAL_AGENTS: Agent[] = [
     systemPrompt: '你是一位資安分流專家。請對照政策合規指南分析漏洞報告。',
     guardrailsEnabled: true,
     updatedAt: '2026-07-29',
+    reviewStatus: 'approved',
+    reviewRecord: approvedReview('James Wu', '2026-07-20'),
   },
   {
     id: 'agent-support',
@@ -574,6 +821,29 @@ export const INITIAL_AGENTS: Agent[] = [
     systemPrompt: '你是一位富有同理心的客戶服務助手。請根據公司政策文檔提供精確、清晰的解答。',
     guardrailsEnabled: true,
     updatedAt: '2026-07-25',
+    reviewStatus: 'approved',
+    reviewRecord: approvedReview('Emily Zhang', '2026-07-18'),
+  },
+  // Pending review Agent
+  {
+    id: 'agent-sales',
+    name: 'CRM 銷售預測 Agent',
+    codeName: 'crm-forecaster-v1',
+    description: '整合 Salesforce CRM 資料進行銷售漏斗分析、成交預測與自動化客戶分群報告。',
+    primaryModel: 'gemini-3.6-flash',
+    teamOwner: 'Sales Engineering',
+    status: 'staging',
+    assignedTools: ['tool-sf-contacts', 'tool-sf-opportunities', 'tool-sf-reports'],
+    virtualKeyId: 'vk-01',
+    systemPrompt: '你是一位專業的銷售數據分析 Agent。請根據 CRM 資料提供精準的銷售預測與建議。',
+    guardrailsEnabled: true,
+    updatedAt: '2026-08-02',
+    reviewStatus: 'pending_review',
+    reviewRecord: {
+      submittedBy: 'Mike Chen (Sales Engineering)',
+      submittedAt: '2026-08-02T14:30:00Z',
+      version: 1,
+    },
   },
 ];
 
