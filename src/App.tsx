@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ActiveTab, Agent, AgentSkill, FallbackRule, FlowEdge, FlowNode, FlowReleaseVersion, GuardrailConfig, KnowledgeBase, MCPServer, ModelProvider, PermissionScope, RoleBinding, Span, Tool, Trace, VirtualKey } from './types';
+import { ActiveTab, Agent, AgentSkill, BatchAuthRequest, FallbackRule, FlowEdge, FlowNode, FlowReleaseVersion, GuardrailConfig, KnowledgeBase, MCPServer, ModelProvider, PermissionScope, RoleBinding, Span, Tool, Trace, VirtualKey } from './types';
 import { Navbar } from './components/Navbar';
 import { BuilderView } from './components/views/BuilderView';
 import { GatewayView } from './components/views/GatewayView';
@@ -28,7 +28,8 @@ import {
   INITIAL_NODES,
   INITIAL_EDGES,
   INITIAL_KNOWLEDGE_BASES,
-  INITIAL_RELEASES
+  INITIAL_RELEASES,
+  INITIAL_BATCH_AUTH_REQUESTS
 } from './data/initialData';
 
 export default function App() {
@@ -42,6 +43,7 @@ export default function App() {
   const [tools, setTools] = useState<Tool[]>(INITIAL_TOOLS);
   const [skills, setSkills] = useState<AgentSkill[]>(INITIAL_SKILLS);
   const [agents, setAgents] = useState<Agent[]>(INITIAL_AGENTS);
+  const [batchAuthRequests, setBatchAuthRequests] = useState<BatchAuthRequest[]>(INITIAL_BATCH_AUTH_REQUESTS);
   const [scopes, setScopes] = useState<PermissionScope[]>(INITIAL_21_SCOPES);
   const [roles, setRoles] = useState<RoleBinding[]>(INITIAL_ROLE_BINDINGS);
   const [guardrails, setGuardrails] = useState<GuardrailConfig>(INITIAL_GUARDRAILS);
@@ -62,12 +64,36 @@ export default function App() {
   const currentUser = '資安合規官 (Reviewer)';
   const [isDiscovering, setIsDiscovering] = useState<string | null>(null);
 
-  // Count pending items across agents, skills, mcpServers, tools
+  // Count pending items across agents, skills, mcpServers, tools, batchAuthRequests
   const pendingReviewsCount = 
     agents.filter((a) => a.reviewStatus === 'pending_review').length +
     skills.filter((s) => s.reviewStatus === 'pending_review').length +
     mcpServers.filter((m) => m.reviewStatus === 'pending_review').length +
-    tools.filter((t) => t.reviewStatus === 'pending_review').length;
+    tools.filter((t) => t.reviewStatus === 'pending_review').length +
+    batchAuthRequests.filter((b) => b.reviewStatus === 'pending_review').length;
+
+  // Handler: Request Batch Authorization for MCP Server in Builder Flow
+  const handleRequestBatchAuth = (mcpServerId: string, serverName: string, toolsIncluded: string[], unionScopes: string[]) => {
+    const newReq: BatchAuthRequest = {
+      id: `batch-auth-${Date.now().toString().slice(-4)}`,
+      flowId: 'flow-finops-auditor-v2',
+      flowName: 'Build 畫布當前 Flow',
+      agentId: 'agent-finops',
+      agentName: 'FinOps 總帳審計 Agent',
+      mcpServerId,
+      mcpServerName: serverName,
+      toolsIncluded,
+      unionScopesRequired: unionScopes,
+      reviewStatus: 'pending_review',
+      reviewRecord: {
+        submittedBy: 'Flow Architect (Submitter)',
+        submittedAt: new Date().toISOString(),
+        version: 1,
+        changeReason: 'Build 畫布整台伺服器 (Dynamic) 動態掛載批次授權申請',
+      },
+    };
+    setBatchAuthRequests((prev) => [newReq, ...prev]);
+  };
 
   // Handler: Issue Virtual Key (local-only)
   const handleCreateKey = async (keyData: {
@@ -259,6 +285,11 @@ export default function App() {
         ...t, reviewStatus: 'approved', enabled: true,
         reviewRecord: { ...t.reviewRecord!, reviewedBy: currentUser, reviewedAt: now, reviewComment: comment, reviewAction: 'approve' }
       } : t));
+    } else if (itemType === 'mcp_batch_auth') {
+      setBatchAuthRequests((prev) => prev.map((b) => b.id === itemId ? {
+        ...b, reviewStatus: 'approved',
+        reviewRecord: { ...b.reviewRecord!, reviewedBy: currentUser, reviewedAt: now, reviewComment: comment, reviewAction: 'approve' }
+      } : b));
     }
   };
 
@@ -284,6 +315,11 @@ export default function App() {
         ...t, reviewStatus: 'rejected', enabled: false,
         reviewRecord: { ...t.reviewRecord!, reviewedBy: currentUser, reviewedAt: now, reviewComment: comment, reviewAction: 'reject' }
       } : t));
+    } else if (itemType === 'mcp_batch_auth') {
+      setBatchAuthRequests((prev) => prev.map((b) => b.id === itemId ? {
+        ...b, reviewStatus: 'rejected',
+        reviewRecord: { ...b.reviewRecord!, reviewedBy: currentUser, reviewedAt: now, reviewComment: comment, reviewAction: 'reject' }
+      } : b));
     }
   };
 
@@ -301,6 +337,8 @@ export default function App() {
       setMcpServers((prev) => prev.map((m) => m.id === itemId ? { ...m, reviewRecord: updateRecord(m.reviewRecord) } : m));
     } else if (itemType === 'tool') {
       setTools((prev) => prev.map((t) => t.id === itemId ? { ...t, reviewRecord: updateRecord(t.reviewRecord) } : t));
+    } else if (itemType === 'mcp_batch_auth') {
+      setBatchAuthRequests((prev) => prev.map((b) => b.id === itemId ? { ...b, reviewRecord: updateRecord(b.reviewRecord) } : b));
     }
   };
 
@@ -468,10 +506,12 @@ export default function App() {
             tools={tools}
             skills={skills}
             agents={agents}
+            mcpServers={mcpServers}
             onRunTestFlow={handleRunTestFlow}
             onNavigateToTraces={() => setActiveTab('traces')}
             onPublishAgentToRegistry={handleCreateAgent}
             onNavigateToRegistry={() => setActiveTab('registry')}
+            onRequestBatchAuth={handleRequestBatchAuth}
           />
         )}
 
@@ -509,6 +549,7 @@ export default function App() {
             skills={skills}
             mcpServers={mcpServers}
             tools={tools}
+            batchAuthRequests={batchAuthRequests}
             currentUser={currentUser}
             onApprove={handleApproveItem}
             onReject={handleRejectItem}

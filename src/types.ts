@@ -17,7 +17,22 @@ export interface ReviewRecord {
   changeReason?: string; // for schema-change re-reviews
 }
 
-export type ReviewableItemType = 'agent' | 'skill' | 'mcp_server' | 'tool';
+export type ReviewableItemType = 'agent' | 'skill' | 'mcp_server' | 'tool' | 'mcp_batch_auth';
+
+export interface BatchAuthRequest {
+  id: string;
+  flowId: string;
+  flowName: string;
+  agentId: string;
+  agentName: string;
+  mcpServerId: string;
+  mcpServerName: string;
+  toolsIncluded: string[];
+  unionScopesRequired: string[];
+  reviewStatus: ReviewStatus;
+  reviewRecord: ReviewRecord;
+  needsReconfirmation?: boolean;
+}
 
 export interface ReviewQueueItem {
   id: string;
@@ -27,7 +42,7 @@ export interface ReviewQueueItem {
   reviewStatus: ReviewStatus;
   reviewRecord: ReviewRecord;
   // reference data for detail panel
-  refData: Agent | AgentSkill | MCPServer | Tool;
+  refData: Agent | AgentSkill | MCPServer | Tool | BatchAuthRequest;
 }
 
 // Visual Agent Builder (Langflow / Dify Style)
@@ -40,6 +55,7 @@ export interface ParameterMapping {
 }
 
 export interface FlowNodeConfig {
+  mountMode?: 'deterministic' | 'dynamic';
   model?: string;
   systemPrompt?: string;
   userPromptTemplate?: string;
@@ -47,6 +63,8 @@ export interface FlowNodeConfig {
   maxTokens?: number;
   toolId?: string;
   toolName?: string;
+  mcpServerId?: string;
+  mcpServerName?: string;
   skillId?: string;
   skillName?: string;
   subAgentId?: string;
@@ -173,6 +191,8 @@ export interface Span {
   output: any;
   error?: string;
   metadata?: Record<string, any>;
+  chosenTool?: string;
+  modelReasoning?: string;
   children?: Span[];
 }
 

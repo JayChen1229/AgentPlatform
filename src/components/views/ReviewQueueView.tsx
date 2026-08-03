@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Agent, AgentSkill, MCPServer, ReviewableItemType, ReviewStatus, Tool } from '../../types';
+import { Agent, AgentSkill, BatchAuthRequest, MCPServer, ReviewableItemType, ReviewStatus, Tool } from '../../types';
 import { formatLatency } from '../../lib/formatters';
 import {
   ClipboardCheck,
@@ -21,6 +21,7 @@ import {
   ChevronRight,
   Lock,
   Zap,
+  Layers,
 } from 'lucide-react';
 
 interface ReviewQueueViewProps {
@@ -28,6 +29,7 @@ interface ReviewQueueViewProps {
   skills: AgentSkill[];
   mcpServers: MCPServer[];
   tools: Tool[];
+  batchAuthRequests?: BatchAuthRequest[];
   currentUser: string;
   onApprove: (itemType: ReviewableItemType, itemId: string) => void;
   onReject: (itemType: ReviewableItemType, itemId: string, comment: string) => void;
@@ -59,6 +61,7 @@ export const ReviewQueueView: React.FC<ReviewQueueViewProps> = ({
   skills,
   mcpServers,
   tools,
+  batchAuthRequests = [],
   currentUser,
   onApprove,
   onReject,
@@ -131,6 +134,21 @@ export const ReviewQueueView: React.FC<ReviewQueueViewProps> = ({
       }
     });
 
+    batchAuthRequests.forEach((b) => {
+      if (b.reviewRecord) {
+        items.push({
+          id: b.id, name: `[批次授權] ${b.flowName} → ${b.mcpServerName}`,
+          description: `動態掛載整台 MCP 伺服器 (${b.mcpServerName}) 的 ${b.toolsIncluded.length} 個已核准工具`,
+          itemType: 'mcp_batch_auth', reviewStatus: b.reviewStatus,
+          submittedBy: b.reviewRecord.submittedBy, submittedAt: b.reviewRecord.submittedAt,
+          reviewedBy: b.reviewRecord.reviewedBy, reviewedAt: b.reviewRecord.reviewedAt,
+          reviewComment: b.reviewRecord.reviewComment, reviewAction: b.reviewRecord.reviewAction,
+          changeReason: b.reviewRecord.changeReason,
+          version: b.reviewRecord.version || 1, refData: b,
+        });
+      }
+    });
+
     return items;
   };
 
@@ -157,6 +175,7 @@ export const ReviewQueueView: React.FC<ReviewQueueViewProps> = ({
       case 'skill': return <Sparkles className="w-4 h-4 text-purple-400" />;
       case 'mcp_server': return <Server className="w-4 h-4 text-indigo-400" />;
       case 'tool': return <Wrench className="w-4 h-4 text-amber-400" />;
+      case 'mcp_batch_auth': return <ShieldCheck className="w-4 h-4 text-amber-400" />;
     }
   };
 
@@ -166,6 +185,7 @@ export const ReviewQueueView: React.FC<ReviewQueueViewProps> = ({
       case 'skill': return 'Agent Skill';
       case 'mcp_server': return 'MCP 服務器';
       case 'tool': return 'MCP 工具';
+      case 'mcp_batch_auth': return '批次授權';
     }
   };
 
@@ -214,7 +234,7 @@ export const ReviewQueueView: React.FC<ReviewQueueViewProps> = ({
           <div>
             <div className="flex items-center space-x-2 text-amber-400 font-mono text-xs mb-1">
               <ClipboardCheck className="w-4 h-4" />
-              <span>註冊審核治理 · AGENT / SKILL / MCP SERVER / TOOL 統一審核佇列</span>
+              <span>註冊審核治理 · AGENT / SKILL / MCP SERVER / TOOL / 批次授權 統一審核佇列</span>
             </div>
             <h1 className="text-2xl font-black text-white tracking-tight">審核佇列 Pending Reviews</h1>
             <p className="text-slate-400 text-sm mt-1 max-w-2xl">
@@ -259,7 +279,7 @@ export const ReviewQueueView: React.FC<ReviewQueueViewProps> = ({
 
         <div className="flex items-center space-x-2">
           <Filter className="w-4 h-4 text-slate-500" />
-          {(['all', 'agent', 'skill', 'mcp_server', 'tool'] as FilterType[]).map((f) => (
+          {(['all', 'agent', 'skill', 'mcp_server', 'tool', 'mcp_batch_auth'] as FilterType[]).map((f) => (
             <button
               key={f}
               onClick={() => setFilterType(f)}
@@ -520,6 +540,53 @@ export const ReviewQueueView: React.FC<ReviewQueueViewProps> = ({
                         {ag.assignedTools.map((tId) => (
                           <span key={tId} className="px-2 py-0.5 bg-slate-950 text-indigo-300 border border-slate-800 rounded font-mono text-[10px]">
                             {tId}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Batch Auth details */}
+              {selectedItem.itemType === 'mcp_batch_auth' && (() => {
+                const b = selectedItem.refData as BatchAuthRequest;
+                return (
+                  <div className="space-y-3 font-mono text-xs">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-800">
+                        <span className="text-slate-500 text-[10px] block">申請 Flow / Agent</span>
+                        <span className="text-amber-300 font-bold">{b.flowName}</span>
+                      </div>
+                      <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-800">
+                        <span className="text-slate-500 text-[10px] block">目標 MCP 服務器</span>
+                        <span className="text-indigo-400 font-bold">{b.mcpServerName}</span>
+                      </div>
+                    </div>
+
+                    <div>
+                      <h4 className="text-xs font-mono font-bold text-slate-300 mb-1 flex items-center space-x-1.5">
+                        <Server className="w-3.5 h-3.5 text-amber-400" />
+                        <span>批次開放授權的工具清單 ({b.toolsIncluded?.length || 0} 個)</span>
+                      </h4>
+                      <div className="flex flex-wrap gap-1.5 bg-slate-950 p-3 rounded-lg border border-slate-800">
+                        {b.toolsIncluded?.map((tName) => (
+                          <span key={tName} className="px-2 py-1 bg-amber-950/60 text-amber-200 border border-amber-800 rounded font-mono text-[11px] font-bold">
+                            {tName}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <h4 className="text-xs font-mono font-bold text-slate-300 mb-1 flex items-center space-x-1.5">
+                        <Lock className="w-3.5 h-3.5 text-indigo-400" />
+                        <span>工具所需權限點聯集 (Union Scope Required)</span>
+                      </h4>
+                      <div className="flex flex-wrap gap-1.5 bg-slate-950 p-3 rounded-lg border border-slate-800">
+                        {b.unionScopesRequired?.map((sc) => (
+                          <span key={sc} className="px-2 py-1 bg-indigo-950 text-indigo-300 border border-indigo-800 rounded font-mono text-[11px]">
+                            {sc}
                           </span>
                         ))}
                       </div>

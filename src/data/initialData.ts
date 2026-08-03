@@ -1,4 +1,4 @@
-import { Agent, AgentSkill, FallbackRule, FlowEdge, FlowNode, FlowReleaseVersion, GuardrailConfig, KnowledgeBase, MCPServer, ModelProvider, PermissionScope, ReviewRecord, RoleBinding, Tool, Trace, VirtualKey } from '../types';
+import { Agent, AgentSkill, BatchAuthRequest, FallbackRule, FlowEdge, FlowNode, FlowReleaseVersion, GuardrailConfig, KnowledgeBase, MCPServer, ModelProvider, PermissionScope, ReviewRecord, RoleBinding, Tool, Trace, VirtualKey } from '../types';
 
 // Shared approved review record template
 const approvedReview = (by: string, date: string, ver: number = 1): ReviewRecord => ({
@@ -10,6 +10,40 @@ const approvedReview = (by: string, date: string, ver: number = 1): ReviewRecord
   reviewAction: 'approve',
   version: ver,
 });
+
+export const INITIAL_BATCH_AUTH_REQUESTS: BatchAuthRequest[] = [
+  {
+    id: 'batch-auth-01',
+    flowId: 'flow-finops-auditor-v2',
+    flowName: '金融總帳異常審計與 Slack 警報 Flow',
+    agentId: 'agent-finops',
+    agentName: 'FinOps 總帳審計 Agent',
+    mcpServerId: 'mcp-salesforce',
+    mcpServerName: 'Salesforce CRM MCP 網關',
+    toolsIncluded: ['salesforce_query_contacts', 'salesforce_list_opportunities', 'salesforce_generate_report'],
+    unionScopesRequired: ['mcp:tool:execute:db', 'mcp:tool:execute:finance'],
+    reviewStatus: 'pending_review',
+    reviewRecord: {
+      submittedBy: 'Mike Chen (Sales Engineering)',
+      submittedAt: '2026-08-02T16:00:00Z',
+      version: 1,
+      changeReason: 'Build 畫布整台伺服器 (Dynamic) 動態掛載批次授權申請',
+    },
+  },
+  {
+    id: 'batch-auth-02',
+    flowId: 'flow-secops-v1',
+    flowName: '資安漏洞自動處置 Flow',
+    agentId: 'agent-secops',
+    agentName: '資安分流處置機器人',
+    mcpServerId: 'mcp-postgres',
+    mcpServerName: '總帳 PostgreSQL MCP 服務器',
+    toolsIncluded: ['db_search_user_ledger'],
+    unionScopesRequired: ['mcp:tool:execute:db'],
+    reviewStatus: 'approved',
+    reviewRecord: approvedReview('James Wu', '2026-07-28'),
+  },
+];
 
 export const INITIAL_SKILLS: AgentSkill[] = [
   {

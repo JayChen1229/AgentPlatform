@@ -7,6 +7,7 @@ import {
   Tool, 
   AgentSkill,
   Agent,
+  MCPServer,
   Trace 
 } from '../../types';
 import { 
@@ -40,7 +41,11 @@ import {
   GripVertical,
   ChevronUp,
   ChevronDown,
-  Bot
+  Bot,
+  AlertTriangle,
+  Server,
+  Lock,
+  ChevronDown as ArrowDown
 } from 'lucide-react';
 
 interface BuilderViewProps {
@@ -55,10 +60,12 @@ interface BuilderViewProps {
   tools: Tool[];
   skills: AgentSkill[];
   agents: Agent[];
+  mcpServers?: MCPServer[];
   onRunTestFlow: (prompt: string, selectedNodeIds: string[]) => Promise<Trace | void>;
   onNavigateToTraces: () => void;
   onPublishAgentToRegistry?: (agent: Omit<Agent, 'id' | 'updatedAt'>) => void;
-  onNavigateToRegistry?: () => void;
+  onNavigateToRegistry: () => void;
+  onRequestBatchAuth?: (mcpServerId: string, serverName: string, toolsIncluded: string[], unionScopes: string[]) => void;
 }
 
 export const BuilderView: React.FC<BuilderViewProps> = ({
@@ -73,14 +80,17 @@ export const BuilderView: React.FC<BuilderViewProps> = ({
   tools,
   skills,
   agents,
+  mcpServers = [],
   onRunTestFlow,
   onNavigateToTraces,
   onPublishAgentToRegistry,
   onNavigateToRegistry,
+  onRequestBatchAuth,
 }) => {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>('node-llm');
   const [draggedNodeIndex, setDraggedNodeIndex] = useState<number | null>(null);
   const [activeModal, setActiveModal] = useState<'rag' | 'release' | 'test' | null>(null);
+  const [showToolsList, setShowToolsList] = useState(false);
 
   // Helper to reorder nodes and automatically rebuild linear connection edges
   const handleReorderNodes = (fromIndex: number, toIndex: number) => {
@@ -165,6 +175,10 @@ export const BuilderView: React.FC<BuilderViewProps> = ({
       output: '最終回應與 Trace 記錄',
     };
 
+    const approvedTool = tools.find((t) => t.reviewStatus === 'approved') || tools[0];
+    const approvedSkill = skills.find((s) => s.reviewStatus === 'approved') || skills[0];
+    const approvedAgent = agents.find((a) => a.reviewStatus === 'approved') || agents[0];
+
     const newNode: FlowNode = {
       id,
       type,
@@ -176,11 +190,11 @@ export const BuilderView: React.FC<BuilderViewProps> = ({
         : type === 'rag'
         ? { knowledgeBaseId: knowledgeBases[0]?.id, topK: 3 }
         : type === 'tool'
-        ? { toolId: tools[0]?.id, toolName: tools[0]?.name }
+        ? { toolId: approvedTool?.id, toolName: approvedTool?.name, mountMode: 'deterministic' }
         : type === 'skill'
-        ? { skillId: skills[0]?.id, skillName: skills[0]?.name }
+        ? { skillId: approvedSkill?.id, skillName: approvedSkill?.name }
         : type === 'agent'
-        ? { subAgentId: agents[0]?.id, subAgentName: agents[0]?.name }
+        ? { subAgentId: approvedAgent?.id, subAgentName: approvedAgent?.name }
         : {},
     };
 
@@ -496,6 +510,13 @@ export const BuilderView: React.FC<BuilderViewProps> = ({
                             </span>
                             <h3 className="text-sm font-bold text-slate-100">{node.label}</h3>
 
+                            {node.type === 'tool' && node.config.mountMode === 'dynamic' && (
+                              <span className="px-2 py-0.5 text-[9px] font-mono font-bold bg-amber-950 text-amber-300 border border-amber-800 rounded-full flex items-center space-x-1">
+                                <Zap className="w-3 h-3 text-amber-400" />
+                                <span>⚡ DYNAMIC (整伺服器)</span>
+                              </span>
+                            )}
+
                             {isNodeToolUnapproved && (
                               <span className="px-2 py-0.5 text-[9px] font-mono font-bold bg-amber-900 text-amber-200 border border-amber-700 rounded-full flex items-center space-x-1 animate-pulse">
                                 <AlertTriangle className="w-3 h-3 text-amber-400" />
@@ -569,7 +590,14 @@ export const BuilderView: React.FC<BuilderViewProps> = ({
                       )}
                       {node.type === 'tool' && (
                         <>
-                          <span>綁定 MCP 工具: <strong className="text-rose-300">{node.config.toolName || 'slack_post_channel'}</strong></span>
+                          {node.config.mountMode === 'dynamic' ? (
+                            <>
+                              <span>⚡ 掛載 MCP 伺服器: <strong className="text-amber-300 font-bold">{node.config.mcpServerName || 'Salesforce CRM MCP 網關'}</strong></span>
+                              <span className="text-[10px] text-amber-400/80 bg-amber-950/50 px-1.5 py-0.5 rounded border border-amber-900">Function Calling 上游動態選用</span>
+                            </>
+                          ) : (
+                            <span>🎯 綁定 MCP 工具: <strong className="text-rose-300 font-bold">{node.config.toolName || 'slack_post_channel'}</strong></span>
+                          )}
                         </>
                       )}
                       {node.type === 'skill' && (
@@ -732,137 +760,290 @@ export const BuilderView: React.FC<BuilderViewProps> = ({
               )}
 
               {selectedNode.type === 'tool' && (
-                <>
+                <div className="space-y-4">
+                  {/* Mount Mode Toggle Component */}
                   <div>
-                    <label className="block text-slate-400 mb-1 font-medium">選擇工具 (僅限已核准工具)</label>
-                    <select
-                      value={selectedNode.config.toolId || (tools.find((t) => t.reviewStatus === 'approved')?.id || '')}
-                      onChange={(e) => {
-                        const t = tools.find((tool) => tool.id === e.target.value);
-                        handleUpdateNodeConfig(selectedNode.id, {
-                          toolId: e.target.value,
-                          toolName: t?.name,
-                        });
-                      }}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-rose-500 text-xs font-mono"
-                    >
-                      {tools.filter((t) => t.reviewStatus === 'approved').map((t) => (
-                        <option key={t.id} value={t.id}>
-                          {t.name} ({t.mcpServerName})
-                        </option>
-                      ))}
-                    </select>
+                    <label className="block text-slate-400 mb-1 font-medium text-xs">掛載模式 (Mount Mode)</label>
+                    <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-950 rounded-lg border border-slate-800 font-mono text-[11px]">
+                      <button
+                        type="button"
+                        onClick={() => handleUpdateNodeConfig(selectedNode.id, { mountMode: 'deterministic' })}
+                        className={`py-1.5 px-2 rounded-md font-bold transition flex items-center justify-center space-x-1 ${
+                          (selectedNode.config.mountMode || 'deterministic') === 'deterministic'
+                            ? 'bg-slate-800 text-slate-100 border border-slate-700 shadow'
+                            : 'text-slate-400 hover:text-slate-200'
+                        }`}
+                      >
+                        <span>🎯 精確工具</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleUpdateNodeConfig(selectedNode.id, { mountMode: 'dynamic' })}
+                        className={`py-1.5 px-2 rounded-md font-bold transition flex items-center justify-center space-x-1 ${
+                          selectedNode.config.mountMode === 'dynamic'
+                            ? 'bg-amber-950 text-amber-300 border border-amber-800 shadow'
+                            : 'text-slate-400 hover:text-amber-400'
+                        }`}
+                      >
+                        <Zap className="w-3.5 h-3.5 text-amber-400" />
+                        <span>⚡ 整台伺服器</span>
+                      </button>
+                    </div>
                   </div>
 
-                  {(() => {
-                    const activeTool = tools.find((t) => t.id === (selectedNode.config.toolId || tools.find((tool) => tool.reviewStatus === 'approved')?.id));
-                    if (!activeTool) return null;
+                  {/* Mode 2: Dynamic Whole Server */}
+                  {selectedNode.config.mountMode === 'dynamic' ? (
+                    <div className="space-y-3 font-mono text-[11px]">
+                      <div>
+                        <label className="block text-slate-400 mb-1 font-medium text-xs">選擇 MCP 服務器 (Dynamic 模式)</label>
+                        <select
+                          value={selectedNode.config.mcpServerId || (mcpServers[0]?.id || '')}
+                          onChange={(e) => {
+                            const srv = mcpServers.find((s) => s.id === e.target.value);
+                            handleUpdateNodeConfig(selectedNode.id, {
+                              mcpServerId: e.target.value,
+                              mcpServerName: srv?.name,
+                            });
+                          }}
+                          className="w-full bg-slate-950 border border-amber-800/80 rounded-lg px-3 py-2 text-amber-300 focus:outline-none focus:border-amber-500 text-xs font-mono"
+                        >
+                          {mcpServers.map((srv) => (
+                            <option key={srv.id} value={srv.id}>
+                              {srv.name} ({srv.type})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
 
-                    const isUnapproved = activeTool.reviewStatus !== 'approved';
-                    const hasPermission = activeTool.scopeRequired === 'mcp:tool:execute:slack' || activeTool.scopeRequired === 'mcp:tool:execute:db' || activeTool.scopeRequired === 'mcp:tool:execute:code' || activeTool.scopeRequired === 'data:read:pii';
+                      {(() => {
+                        const activeSrvId = selectedNode.config.mcpServerId || mcpServers[0]?.id;
+                        const activeSrv = mcpServers.find((s) => s.id === activeSrvId);
+                        const serverApprovedTools = tools.filter((t) => t.mcpServerId === activeSrvId && t.reviewStatus === 'approved');
+                        const serverAllTools = tools.filter((t) => t.mcpServerId === activeSrvId);
 
-                    // Available upstream variables for mapping
-                    const upstreamNodes = nodes.filter((n) => n.id !== selectedNode.id);
-                    const currentMappings = selectedNode.config.parameterMappings || [];
+                        // Union of required scopes for all approved tools on this server
+                        const unionScopes = Array.from(new Set(serverApprovedTools.map((t) => t.scopeRequired)));
+                        const allowedScopes = ['mcp:tool:execute:slack', 'mcp:tool:execute:db', 'mcp:tool:execute:code', 'data:read:pii'];
+                        const missingScopes = unionScopes.filter((s) => !allowedScopes.includes(s));
 
-                    const handleMappingChange = (fieldName: string, sourceVar: string) => {
-                      const updated = currentMappings.filter((m) => m.fieldName !== fieldName);
-                      if (sourceVar) {
-                        const [srcNodeId, srcVar] = sourceVar.split('::');
-                        updated.push({ fieldName, sourceNodeId: srcNodeId || 'node-start', sourceVariable: srcVar || 'user_input' });
-                      }
-                      handleUpdateNodeConfig(selectedNode.id, { parameterMappings: updated });
-                    };
+                        return (
+                          <div className="space-y-3">
+                            {/* Collapsible approved tools list */}
+                            <div className="bg-slate-950 border border-slate-800 rounded-lg overflow-hidden">
+                              <button
+                                type="button"
+                                onClick={() => setShowToolsList(!showToolsList)}
+                                className="w-full p-2.5 flex items-center justify-between text-slate-300 font-bold text-[11px] bg-slate-900/80 hover:bg-slate-800 transition"
+                              >
+                                <span className="flex items-center space-x-1.5">
+                                  <Server className="w-3.5 h-3.5 text-indigo-400" />
+                                  <span>📦 此伺服器開放 {serverApprovedTools.length} 個已核准工具 (唯讀)</span>
+                                </span>
+                                <ChevronRight className={`w-3.5 h-3.5 transition-transform ${showToolsList ? 'rotate-90' : ''}`} />
+                              </button>
 
-                    return (
-                      <div className="space-y-3 font-mono text-[11px]">
-                        {/* Off shelf / unapproved warning */}
-                        {isUnapproved && (
-                          <div className="bg-amber-950/60 border border-amber-800 p-2.5 rounded-lg text-amber-300 space-y-1">
-                            <div className="font-bold flex items-center space-x-1">
-                              <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
-                              <span>⚠️ 此工具已下架/待審核</span>
-                            </div>
-                            <p className="text-[10px] text-amber-400/80">治理團隊已暫停此工具，部署將被阻擋，請重新選擇已核准工具。</p>
-                          </div>
-                        )}
-
-                        {/* Readonly Tool Info */}
-                        <div className="bg-slate-950 p-3 rounded-lg border border-slate-800 space-y-1.5 text-slate-300">
-                          <div className="flex justify-between">
-                            <span className="text-slate-500">所屬 MCP 服務器:</span>
-                            <span className="text-rose-300 font-bold">{activeTool.mcpServerName}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-slate-500">平均延遲:</span>
-                            <span className="text-slate-200">{activeTool.avgLatencyMs} ms</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-slate-500">所需權限點:</span>
-                            <span className="text-indigo-400 font-bold">{activeTool.scopeRequired}</span>
-                          </div>
-                          {!hasPermission && (
-                            <div className="mt-1 text-red-400 text-[10px] bg-red-950/50 p-1.5 rounded border border-red-800">
-                              ⚠️ 此 Agent 身份缺少所需權限，無法上線
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Readonly input schema preview */}
-                        <div>
-                          <label className="block text-slate-400 mb-1 font-medium">inputSchema 結構圖 (唯讀)</label>
-                          <pre className="bg-slate-950 border border-slate-800 rounded-lg p-2 text-[10px] font-mono text-emerald-400 overflow-x-auto max-h-32">
-                            {JSON.stringify(activeTool.inputSchema, null, 2)}
-                          </pre>
-                        </div>
-
-                        {/* Parameter Mapping Section */}
-                        <div className="space-y-2 border-t border-slate-800 pt-2">
-                          <label className="block text-slate-300 font-semibold text-xs flex items-center space-x-1.5">
-                            <ArrowRight className="w-3.5 h-3.5 text-purple-400" />
-                            <span>參數映射 (Upstream Variable Mapping)</span>
-                          </label>
-                          <p className="text-[10px] text-slate-400">對應上游節點的 Context 輸出變數至 inputSchema 欄位：</p>
-
-                          {activeTool.inputSchema?.properties ? (
-                            Object.keys(activeTool.inputSchema.properties).map((propName) => {
-                              const propDef = activeTool.inputSchema.properties[propName];
-                              const currentMap = currentMappings.find((m) => m.fieldName === propName);
-                              const mapVal = currentMap ? `${currentMap.sourceNodeId}::${currentMap.sourceVariable}` : '';
-
-                              return (
-                                <div key={propName} className="bg-slate-950 p-2 rounded-lg border border-slate-800 space-y-1">
-                                  <div className="flex items-center justify-between text-[11px]">
-                                    <span className="font-bold text-slate-200">{propName}</span>
-                                    <span className="text-[10px] text-slate-500">({propDef.type || 'string'})</span>
-                                  </div>
-                                  <select
-                                    value={mapVal}
-                                    onChange={(e) => handleMappingChange(propName, e.target.value)}
-                                    className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-[10px] text-purple-300 focus:outline-none focus:border-purple-500"
-                                  >
-                                    <option value="">-- 未映射 (使用預設值) --</option>
-                                    <option value="node-start::user_input">#1 觸發點 ({{user_input}})</option>
-                                    <option value="node-rag::retrieved_context">#2 RAG 知識庫 ({{retrieved_context}})</option>
-                                    <option value="node-llm::generated_text">#4 Gemini LLM ({{generated_text}})</option>
-                                  </select>
-                                  {currentMap && (
-                                    <div className="flex items-center space-x-1 text-[9px] text-emerald-400 pt-0.5">
-                                      <CheckCircle2 className="w-3 h-3" />
-                                      <span>已映射至 &#123;&#123;{currentMap.sourceVariable}&#125;&#125;</span>
-                                    </div>
+                              {showToolsList && (
+                                <div className="p-2 space-y-1.5 border-t border-slate-800 max-h-40 overflow-y-auto">
+                                  {serverApprovedTools.length > 0 ? (
+                                    serverApprovedTools.map((t) => (
+                                      <div key={t.id} className="p-1.5 rounded bg-slate-900 border border-slate-800 text-[10px] space-y-0.5">
+                                        <div className="font-bold text-amber-300 flex items-center justify-between">
+                                          <span>{t.name}</span>
+                                          <span className="text-[9px] text-slate-500">{t.scopeRequired}</span>
+                                        </div>
+                                        <div className="text-slate-400 text-[9px] line-clamp-1">{t.description}</div>
+                                      </div>
+                                    ))
+                                  ) : (
+                                    <div className="text-slate-500 text-[10px] italic p-1">此伺服器尚無已核准的開放工具</div>
                                   )}
                                 </div>
-                              );
-                            })
-                          ) : (
-                            <span className="text-[10px] text-slate-500">無可對應參數</span>
-                          )}
-                        </div>
+                              )}
+                            </div>
+
+                            {/* Scope Union Check */}
+                            <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-800 space-y-1">
+                              <span className="text-slate-400 font-bold block text-[10px]">伺服器工具權限點聯集:</span>
+                              <div className="flex flex-wrap gap-1">
+                                {unionScopes.map((sc) => (
+                                  <span key={sc} className="px-1.5 py-0.5 rounded bg-indigo-950 text-indigo-300 border border-indigo-800 text-[10px]">
+                                    {sc}
+                                  </span>
+                                ))}
+                              </div>
+
+                              {missingScopes.length > 0 && (
+                                <div className="mt-2 text-red-400 text-[10px] bg-red-950/60 p-2 rounded border border-red-800 font-mono">
+                                  ⚠️ 此 Agent 身份缺少下列工具所需權限：
+                                  <div className="font-bold mt-0.5">{missingScopes.join(', ')}</div>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Batch Authorization trigger button */}
+                            {onRequestBatchAuth && activeSrv && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  onRequestBatchAuth(
+                                    activeSrv.id,
+                                    activeSrv.name,
+                                    serverApprovedTools.map((t) => t.name),
+                                    unionScopes
+                                  );
+                                  alert(`已提交 [${activeSrv.name}] 批次工具授權申請至治理審核佇列！`);
+                                }}
+                                className="w-full bg-amber-950 hover:bg-amber-900 text-amber-200 border border-amber-800 font-bold py-2 rounded-lg transition flex items-center justify-center space-x-1.5 shadow-md"
+                              >
+                                <Lock className="w-3.5 h-3.5 text-amber-400" />
+                                <span>提交批次工具授權申請</span>
+                              </button>
+                            )}
+
+                            {/* Function calling hint */}
+                            <div className="bg-amber-950/40 border border-amber-800/60 p-2.5 rounded-lg text-amber-300 text-[10px] space-y-1 leading-relaxed">
+                              <span className="font-bold flex items-center space-x-1">
+                                <Zap className="w-3.5 h-3.5 text-amber-400" />
+                                <span>動態 Function Calling 說明</span>
+                              </span>
+                              <p className="text-amber-200/90">此節點的工具將以 function calling 形式提供給上游 LLM 推理節點，由模型於執行時動態選用，不需手動映射參數。</p>
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  ) : (
+                    /* Mode 1: Deterministic Single Tool */
+                    <>
+                      <div>
+                        <label className="block text-slate-400 mb-1 font-medium">選擇工具 (僅限已核准工具)</label>
+                        <select
+                          value={selectedNode.config.toolId || (tools.find((t) => t.reviewStatus === 'approved')?.id || '')}
+                          onChange={(e) => {
+                            const t = tools.find((tool) => tool.id === e.target.value);
+                            handleUpdateNodeConfig(selectedNode.id, {
+                              toolId: e.target.value,
+                              toolName: t?.name,
+                            });
+                          }}
+                          className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-rose-500 text-xs font-mono"
+                        >
+                          {tools.filter((t) => t.reviewStatus === 'approved').map((t) => (
+                            <option key={t.id} value={t.id}>
+                              {t.name} ({t.mcpServerName})
+                            </option>
+                          ))}
+                        </select>
                       </div>
-                    );
-                  })()}
-                </>
+
+                      {(() => {
+                        const activeTool = tools.find((t) => t.id === (selectedNode.config.toolId || tools.find((tool) => tool.reviewStatus === 'approved')?.id));
+                        if (!activeTool) return null;
+
+                        const isUnapproved = activeTool.reviewStatus !== 'approved';
+                        const hasPermission = activeTool.scopeRequired === 'mcp:tool:execute:slack' || activeTool.scopeRequired === 'mcp:tool:execute:db' || activeTool.scopeRequired === 'mcp:tool:execute:code' || activeTool.scopeRequired === 'data:read:pii';
+                        const currentMappings = selectedNode.config.parameterMappings || [];
+
+                        const handleMappingChange = (fieldName: string, sourceVar: string) => {
+                          const updated = currentMappings.filter((m) => m.fieldName !== fieldName);
+                          if (sourceVar) {
+                            const [srcNodeId, srcVar] = sourceVar.split('::');
+                            updated.push({ fieldName, sourceNodeId: srcNodeId || 'node-start', sourceVariable: srcVar || 'user_input' });
+                          }
+                          handleUpdateNodeConfig(selectedNode.id, { parameterMappings: updated });
+                        };
+
+                        return (
+                          <div className="space-y-3 font-mono text-[11px]">
+                            {/* Off shelf / unapproved warning */}
+                            {isUnapproved && (
+                              <div className="bg-amber-950/60 border border-amber-800 p-2.5 rounded-lg text-amber-300 space-y-1">
+                                <div className="font-bold flex items-center space-x-1">
+                                  <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
+                                  <span>⚠️ 此工具已下架/待審核</span>
+                                </div>
+                                <p className="text-[10px] text-amber-400/80">治理團隊已暫停此工具，部署將被阻擋，請重新選擇已核准工具。</p>
+                              </div>
+                            )}
+
+                            {/* Readonly Tool Info */}
+                            <div className="bg-slate-950 p-3 rounded-lg border border-slate-800 space-y-1.5 text-slate-300">
+                              <div className="flex justify-between">
+                                <span className="text-slate-500">所屬 MCP 服務器:</span>
+                                <span className="text-rose-300 font-bold">{activeTool.mcpServerName}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-slate-500">平均延遲:</span>
+                                <span className="text-slate-200">{activeTool.avgLatencyMs} ms</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-slate-500">所需權限點:</span>
+                                <span className="text-indigo-400 font-bold">{activeTool.scopeRequired}</span>
+                              </div>
+                              {!hasPermission && (
+                                <div className="mt-1 text-red-400 text-[10px] bg-red-950/50 p-1.5 rounded border border-red-800">
+                                  ⚠️ 此 Agent 身份缺少所需權限，無法上線
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Readonly input schema preview */}
+                            <div>
+                              <label className="block text-slate-400 mb-1 font-medium">inputSchema 結構圖 (唯讀)</label>
+                              <pre className="bg-slate-950 border border-slate-800 rounded-lg p-2 text-[10px] font-mono text-emerald-400 overflow-x-auto max-h-32">
+                                {JSON.stringify(activeTool.inputSchema, null, 2)}
+                              </pre>
+                            </div>
+
+                            {/* Parameter Mapping Section */}
+                            <div className="space-y-2 border-t border-slate-800 pt-2">
+                              <label className="block text-slate-300 font-semibold text-xs flex items-center space-x-1.5">
+                                <ArrowRight className="w-3.5 h-3.5 text-purple-400" />
+                                <span>參數映射 (Upstream Variable Mapping)</span>
+                              </label>
+                              <p className="text-[10px] text-slate-400">對應上游節點的 Context 輸出變數至 inputSchema 欄位：</p>
+
+                              {activeTool.inputSchema?.properties ? (
+                                Object.keys(activeTool.inputSchema.properties).map((propName) => {
+                                  const propDef = activeTool.inputSchema.properties[propName];
+                                  const currentMap = currentMappings.find((m) => m.fieldName === propName);
+                                  const mapVal = currentMap ? `${currentMap.sourceNodeId}::${currentMap.sourceVariable}` : '';
+
+                                  return (
+                                    <div key={propName} className="bg-slate-950 p-2 rounded-lg border border-slate-800 space-y-1">
+                                      <div className="flex items-center justify-between text-[11px]">
+                                        <span className="font-bold text-slate-200">{propName}</span>
+                                        <span className="text-[10px] text-slate-500">({propDef.type || 'string'})</span>
+                                      </div>
+                                      <select
+                                        value={mapVal}
+                                        onChange={(e) => handleMappingChange(propName, e.target.value)}
+                                        className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-[10px] text-purple-300 focus:outline-none focus:border-purple-500"
+                                      >
+                                        <option value="">-- 未映射 (使用預設值) --</option>
+                                        <option value="node-start::user_input">#1 觸發點 (&#123;&#123;user_input&#125;&#125;)</option>
+                                        <option value="node-rag::retrieved_context">#2 RAG 知識庫 (&#123;&#123;retrieved_context&#125;&#125;)</option>
+                                        <option value="node-llm::generated_text">#4 Gemini LLM (&#123;&#123;generated_text&#125;&#125;)</option>
+                                      </select>
+                                      {currentMap && (
+                                        <div className="flex items-center space-x-1 text-[9px] text-emerald-400 pt-0.5">
+                                          <CheckCircle2 className="w-3 h-3" />
+                                          <span>已映射至 &#123;&#123;{currentMap.sourceVariable}&#125;&#125;</span>
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })
+                              ) : (
+                                <span className="text-[10px] text-slate-500">無可對應參數</span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </>
+                  )}
+                </div>
               )}
 
               {selectedNode.type === 'skill' && (
@@ -888,14 +1069,14 @@ export const BuilderView: React.FC<BuilderViewProps> = ({
                     </select>
                   </div>
                   {(() => {
-                    const activeSkill = skills.find((s) => s.id === (selectedNode.config.skillId || skills[0]?.id));
+                    const activeSkill = skills.find((s) => s.id === (selectedNode.config.skillId || skills.find((sk) => sk.reviewStatus === 'approved')?.id || skills[0]?.id));
                     if (!activeSkill) return null;
                     return (
                       <div className="bg-slate-950/80 p-2.5 rounded-lg border border-slate-800 space-y-1.5 font-mono text-[11px] text-slate-300">
                         <div className="text-purple-300 font-bold">{activeSkill.name}</div>
                         <div className="text-slate-400">{activeSkill.description}</div>
-                        <div className="text-[10px] text-slate-500">內部 SOP: {activeSkill.promptSop}</div>
-                        <div className="text-[10px] text-purple-400/80">包含工具: {activeSkill.tools.join(', ') || '無'}</div>
+                        <div className="text-[10px] text-slate-500">內部 SOP: {activeSkill.systemPromptInstruction}</div>
+                        <div className="text-[10px] text-purple-400/80">包含工具: {(activeSkill.requiredTools || []).join(', ') || '無'}</div>
                       </div>
                     );
                   })()}

@@ -91,6 +91,23 @@ export const TracesView: React.FC<TracesViewProps> = ({ traces }) => {
           </div>
         </div>
 
+        {/* Span Reasoning / Chosen Tool Metadata Detail */}
+        {(span.chosenTool || span.modelReasoning || span.type === 'mcp_tool') && (
+          <div className="mt-1 p-2 rounded-lg bg-slate-950/80 border border-amber-900/40 text-[10px] font-mono text-slate-300 space-y-1" style={{ marginLeft: `${depth * 20 + 24}px` }}>
+            <div className="flex items-center space-x-1.5 text-amber-400 font-bold">
+              <Zap className="w-3 h-3 text-amber-400" />
+              <span>LLM 動態 Function Calling 稽核:</span>
+              <span className="text-amber-200 bg-amber-950 px-1.5 py-0.2 rounded border border-amber-800">
+                {span.chosenTool || span.name.replace('工具調用：', '')}
+              </span>
+            </div>
+            <p className="text-slate-400 pl-4 border-l border-amber-800/40">
+              <strong className="text-slate-300">Reasoning 推理原因：</strong>
+              {span.modelReasoning || '模型判斷 Prompt 意圖符合此 MCP 工具輸入規格，自動產生引數並觸發連線調用。'}
+            </p>
+          </div>
+        )}
+
         {hasChildren && isExpanded && (
           <div className="space-y-1 border-l border-slate-800/80 pl-2">
             {span.children!.map((child) => renderSpanNode(child, depth + 1))}
