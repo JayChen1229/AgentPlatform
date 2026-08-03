@@ -355,7 +355,6 @@ export default function App() {
       <footer className="border-t border-slate-800 bg-slate-900/60 py-4 text-center text-xs text-slate-500 font-mono">
         <div className="max-w-7xl mx-auto px-4 flex flex-wrap items-center justify-between gap-2">
           <span>企業級 Agent 平台 Web UI • LiteLLM 網關 + Langfuse v3 追蹤 + AgentCore MCP + Cedar/OPA 策略治理</span>
-          <span>Google AI Studio 平台建置</span>
         </div>
       </footer>
 
